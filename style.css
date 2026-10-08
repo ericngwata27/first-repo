@@ -1,178 +1,543 @@
-/* ===== Colors we reuse throughout the page ===== */
+/* =========================================================
+   COLORS AND FONTS
+   We store them as "variables" so we can reuse them everywhere.
+   To change the look of the whole site, change them here.
+   ========================================================= */
 :root {
-  --main-color: #3b5bdb;      /* blue for buttons and headings */
-  --university-color: #7048e8; /* purple tag for universities */
-  --job-color: #2b8a3e;        /* green tag for jobs */
-  --background: #f4f6fb;       /* light gray page background */
-  --card-background: #ffffff;  /* white boxes */
-  --text-color: #212529;       /* dark gray text */
+  --ink: #1b2437;          /* main text color: deep navy */
+  --muted: #5d6b82;        /* softer text for hints */
+  --page: #eef1f6;         /* page background: cool light gray */
+  --surface: #ffffff;      /* white panels */
+  --line: #d9dfe9;         /* thin borders */
+  --accent: #2756c5;       /* blue for buttons and active tabs */
+  --accent-soft: #e6edfb;  /* light blue for highlights */
+  --pin: #e4572e;          /* orange-red for map pins */
+  --good: #2e7d4f;         /* green for pros */
+  --bad: #b23a3a;          /* red for cons */
+
+  --font-display: "Bricolage Grotesque", "Segoe UI", Arial, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+
+  --radius: 14px;
+  --shadow: 0 1px 3px rgba(27, 36, 55, 0.08), 0 8px 24px rgba(27, 36, 55, 0.06);
 }
 
-/* ===== Whole page ===== */
+/* =========================================================
+   BASICS
+   ========================================================= */
 * {
-  box-sizing: border-box; /* makes widths easier to work with */
+  box-sizing: border-box; /* makes widths include padding, which is easier */
 }
 
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background-color: var(--background);
-  color: var(--text-color);
+  font-family: var(--font-body);
+  font-size: 16px;
   line-height: 1.5;
+  color: var(--ink);
+  background: var(--page);
 }
 
-/* ===== Top banner ===== */
-header {
-  background-color: var(--main-color);
-  color: white;
-  text-align: center;
-  padding: 32px 16px;
-}
-
-header h1 {
+h1, h2, h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
   margin: 0;
-}
-
-/* ===== Main content area ===== */
-main {
-  max-width: 800px;  /* keeps the content from getting too wide */
-  margin: 0 auto;    /* centers it on the page */
-  padding: 16px;
-}
-
-/* White boxes that hold each section */
-.card {
-  background-color: var(--card-background);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  text-wrap: balance;
 }
 
 h2 {
-  margin-top: 0;
-  color: var(--main-color);
+  font-size: 1.35rem;
+  margin-bottom: 12px;
 }
 
-/* ===== Form ===== */
-form {
+main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+[hidden] {
+  display: none !important; /* makes the "hidden" attribute always win */
+}
+
+/* =========================================================
+   TOP BAR AND TABS
+   ========================================================= */
+.topbar {
+  background: var(--ink);
+  color: white;
+  padding: 18px 16px 0;
   display: flex;
-  flex-direction: column; /* stack the fields on top of each other */
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
 }
 
-label {
-  font-weight: bold;
-  margin-top: 12px;
+.brand h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.brand p {
+  margin: 2px 0 14px;
+  color: #b9c3d6;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  font: 600 1rem var(--font-body);
+  border: none;
+  cursor: pointer;
+  padding: 10px 20px;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: #b9c3d6;
+}
+
+.tab:hover {
+  color: white;
+}
+
+/* The selected tab looks like it is attached to the page below it */
+.tab.active {
+  background: var(--page);
+  color: var(--ink);
+}
+
+/* =========================================================
+   PANELS (the white boxes)
+   ========================================================= */
+.panel {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  min-width: 0; /* stops long text from stretching the layout */
+}
+
+.hint {
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.count {
+  display: inline-block;
+  font: 700 0.85rem var(--font-body);
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 10px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+/* =========================================================
+   MAP AREA: map on the left, details on the right
+   ========================================================= */
+.map-area {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+#map {
+  height: 520px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 0; /* keeps the map underneath other things */
+}
+
+#details-panel {
+  height: 520px;
+  overflow-y: auto; /* scroll inside the panel if the info is long */
+}
+
+.panel-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+}
+
+.panel-empty h2 {
+  color: var(--ink);
+}
+
+/* =========================================================
+   CUSTOM MAP PINS
+   A teardrop shape made from a rotated square with 3 round corners.
+   ========================================================= */
+.pin {
+  width: 26px;
+  height: 26px;
+  background: var(--pin);
+  border: 3px solid white;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s;
+}
+
+.pin:hover {
+  transform: rotate(-45deg) scale(1.15);
+}
+
+/* The pin of the university that is currently selected */
+.pin.selected {
+  background: var(--accent);
+  transform: rotate(-45deg) scale(1.3);
+}
+
+/* =========================================================
+   DETAILS PANEL CONTENT
+   ========================================================= */
+.details-location {
+  color: var(--muted);
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.details-course {
+  font-size: 1.05rem;
+  margin: 6px 0 14px;
+}
+
+/* Small colored label showing how long until the deadline */
+.deadline-badge {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.deadline-badge.soon {
+  background: #fdecd9;
+  color: #a4510b;
+}
+
+.deadline-badge.passed {
+  background: #ececec;
+  color: #6b6b6b;
+}
+
+.detail-section {
+  margin-top: 18px;
+}
+
+.detail-section h3 {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
   margin-bottom: 4px;
 }
 
-input,
-select,
-textarea {
-  padding: 10px;
-  font-size: 16px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  font-family: inherit;
+.detail-section p {
+  margin: 0;
+  white-space: pre-line; /* keeps the line breaks the user typed */
 }
 
-button {
-  cursor: pointer;
-  font-size: 16px;
-  border: none;
-  border-radius: 6px;
-  padding: 10px 16px;
+.pros-cons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
 }
 
-form button {
-  margin-top: 16px;
-  background-color: var(--main-color);
-  color: white;
+.pros-cons .detail-section {
+  margin-top: 0;
 }
 
-form button:hover {
-  opacity: 0.9;
+.pros-cons ul {
+  margin: 0;
+  padding-left: 18px;
 }
 
-/* ===== Filter buttons ===== */
-.filters {
+.pros h3 { color: var(--good); }
+.cons h3 { color: var(--bad); }
+
+.details-actions {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  margin-top: 22px;
 }
 
-.filter {
-  background-color: #e9ecef;
-}
-
-/* The filter that is currently selected */
-.filter.active {
-  background-color: var(--main-color);
-  color: white;
-}
-
-/* ===== List of options ===== */
-#options-list {
+/* =========================================================
+   BOTTOM AREA: form on the left, list on the right
+   ========================================================= */
+.bottom-area {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* cards fill the row */
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
 }
 
-.option {
-  border: 1px solid #dee2e6;
-  border-radius: 10px;
-  padding: 16px;
+/* ----- Form ----- */
+form {
+  display: flex;
+  flex-direction: column;
 }
 
-.option h3 {
-  margin: 8px 0;
+label {
+  font-weight: 600;
+  margin: 12px 0 4px;
+  display: block;
 }
 
-.option p {
-  margin: 4px 0;
+input,
+textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
 }
 
-/* Small colored label showing "University" or "Job" */
-.tag {
-  display: inline-block;
+input:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  background: white;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-message {
+  min-height: 1.5em;
+  margin: 12px 0 0;
+  font-weight: 600;
+}
+
+.form-message.error {
+  color: var(--bad);
+}
+
+.form-message.success {
+  color: var(--good);
+}
+
+/* ----- Buttons ----- */
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.button {
+  font: 600 1rem var(--font-body);
+  cursor: pointer;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+}
+
+.button:hover {
+  background: var(--page);
+}
+
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
   color: white;
-  font-size: 12px;
-  font-weight: bold;
-  padding: 2px 8px;
-  border-radius: 999px;
 }
 
-.tag.University {
-  background-color: var(--university-color);
+.button.primary:hover {
+  filter: brightness(1.1);
 }
 
-.tag.Job {
-  background-color: var(--job-color);
+.button.primary:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
-.stars {
-  color: #f59f00; /* gold */
-  font-size: 18px;
+.button.danger {
+  color: var(--bad);
 }
 
-.delete-button {
-  margin-top: 10px;
-  background-color: #ffe3e3;
-  color: #c92a2a;
-  font-size: 14px;
-  padding: 6px 12px;
+.button.small {
+  font-size: 0.85rem;
+  padding: 4px 12px;
 }
 
-#empty-message {
-  color: #868e96;
-  text-align: center;
+/* A visible outline when using the keyboard to move around */
+button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
-/* ===== Bottom of page ===== */
+/* ----- University list ----- */
+.uni-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.uni-item {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
+
+.uni-item:hover {
+  border-color: var(--accent);
+}
+
+.uni-item.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.uni-item strong {
+  font-size: 1.05rem;
+}
+
+.uni-item .uni-sub {
+  color: var(--muted);
+  font-size: 0.92rem;
+  grid-column: 1;
+}
+
+.uni-item .deadline-badge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* =========================================================
+   PROFILE TAB
+   ========================================================= */
+.profile-intro {
+  margin-bottom: 20px;
+}
+
+.profile-intro h2 {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
+}
+
+.profile-intro p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Boxes with the "wide" class stretch across both columns */
+.profile-box.wide {
+  grid-column: 1 / -1;
+}
+
+.profile-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.profile-box-header label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.profile-status {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums; /* numbers stay the same width */
+}
+
+.profile-status.over-limit {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
 footer {
   text-align: center;
-  color: #868e96;
-  font-size: 14px;
-  padding: 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 8px 16px 28px;
+}
+
+/* =========================================================
+   SMALLER SCREENS (tablets and phones)
+   Everything stacks into a single column.
+   ========================================================= */
+@media (max-width: 900px) {
+  .map-area,
+  .bottom-area,
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #map {
+    height: 380px;
+  }
+
+  #details-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .panel-empty {
+    padding: 12px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .field-row,
+  .pros-cons {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Turn off animations for people who prefer less motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }

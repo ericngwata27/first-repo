@@ -6,74 +6,192 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Future Planner</title>
 
-  <!-- Link to our stylesheet (controls how the page looks) -->
+  <!-- Fonts from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:wght@400;600;700&display=swap">
+
+  <!-- Leaflet: the map library's stylesheet (makes the map look right) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <!-- Our own stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ===== Top banner ===== -->
-  <header>
-    <h1>My Future Planner</h1>
-    <p>Compare universities and jobs side by side to help decide what's next.</p>
+  <!-- ===== Top bar with the app name and the two tabs ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <h1>My Future Planner</h1>
+      <p>Every university I'm considering, on one map.</p>
+    </div>
+
+    <!-- The tabs. Each button says which section it opens using data-tab. -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="universities-tab">Universities</button>
+      <button class="tab" data-tab="profile-tab">Profile</button>
+    </nav>
   </header>
 
   <main>
 
-    <!-- ===== Form for adding a new option ===== -->
-    <section class="card">
-      <h2>Add an option</h2>
+    <!-- ========================================================= -->
+    <!-- TAB 1: UNIVERSITIES                                        -->
+    <!-- ========================================================= -->
+    <section id="universities-tab" class="tab-content">
 
-      <form id="option-form">
-        <label for="type">Type</label>
-        <select id="type">
-          <option value="University">University</option>
-          <option value="Job">Job</option>
-        </select>
+      <!-- Map on the left, details panel on the right -->
+      <div class="map-area">
+        <!-- Leaflet draws the map inside this empty div -->
+        <div id="map"></div>
 
-        <label for="name">Name</label>
-        <input id="name" type="text" placeholder="e.g. University of Toronto or Junior Designer" required>
-
-        <label for="location">Location</label>
-        <input id="location" type="text" placeholder="e.g. Toronto, Canada">
-
-        <label for="money">Yearly cost (university) or salary (job)</label>
-        <input id="money" type="number" min="0" placeholder="e.g. 25000">
-
-        <label for="rating">How much do I like it? (1 to 5)</label>
-        <input id="rating" type="number" min="1" max="5" value="3">
-
-        <label for="notes">Pros, cons, and notes</label>
-        <textarea id="notes" rows="3" placeholder="e.g. Great program, but far from home"></textarea>
-
-        <button type="submit">Add to my list</button>
-      </form>
-    </section>
-
-    <!-- ===== Buttons to filter the list ===== -->
-    <section class="card">
-      <h2>My options</h2>
-
-      <div class="filters">
-        <button class="filter active" data-filter="All">All</button>
-        <button class="filter" data-filter="University">Universities</button>
-        <button class="filter" data-filter="Job">Jobs</button>
+        <!-- Details of the selected university. script.js fills this in. -->
+        <aside id="details-panel" class="panel">
+          <div class="panel-empty">
+            <h2>Pick a university</h2>
+            <p>Click a pin on the map or a university in the list to see everything you've saved about it.</p>
+          </div>
+        </aside>
       </div>
 
-      <!-- script.js fills this area with one card per option -->
-      <div id="options-list"></div>
+      <!-- Form on the left, list on the right -->
+      <div class="bottom-area">
 
-      <!-- Shown only when the list is empty -->
-      <p id="empty-message">Nothing here yet. Add your first option above!</p>
+        <!-- ----- Add / edit form ----- -->
+        <section class="panel">
+          <h2 id="form-title">Add a university</h2>
+
+          <form id="uni-form">
+            <label for="name">University name *</label>
+            <input id="name" type="text" required placeholder="e.g. University of Edinburgh">
+
+            <label for="course">Course I'm interested in *</label>
+            <input id="course" type="text" required placeholder="e.g. BSc Computer Science">
+
+            <!-- Two fields side by side -->
+            <div class="field-row">
+              <div>
+                <label for="city">City *</label>
+                <input id="city" type="text" required placeholder="e.g. Edinburgh">
+              </div>
+              <div>
+                <label for="country">Country *</label>
+                <input id="country" type="text" required placeholder="e.g. United Kingdom">
+              </div>
+            </div>
+
+            <label for="deadline">Application deadline</label>
+            <input id="deadline" type="date">
+
+            <label for="requirements">Required grades / entry requirements</label>
+            <textarea id="requirements" rows="2" placeholder="e.g. AAA at A-level including Maths, or IB 38 points"></textarea>
+
+            <label for="application-info">Application info</label>
+            <textarea id="application-info" rows="2" placeholder="e.g. Apply through UCAS. Needs a personal statement and one reference."></textarea>
+
+            <div class="field-row">
+              <div>
+                <label for="pros">Pros</label>
+                <textarea id="pros" rows="3" placeholder="One per line"></textarea>
+              </div>
+              <div>
+                <label for="cons">Cons</label>
+                <textarea id="cons" rows="3" placeholder="One per line"></textarea>
+              </div>
+            </div>
+
+            <!-- Messages like "Finding location..." appear here -->
+            <p id="form-message" class="form-message" role="status"></p>
+
+            <div class="button-row">
+              <button type="submit" id="submit-button" class="button primary">Add to map</button>
+              <!-- Only shown while editing -->
+              <button type="button" id="cancel-edit" class="button" hidden>Cancel</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- ----- List of all universities ----- -->
+        <section class="panel">
+          <h2>My universities <span id="uni-count" class="count">0</span></h2>
+          <p class="hint">Sorted by deadline, soonest first.</p>
+
+          <!-- script.js adds one item per university here -->
+          <ul id="uni-list" class="uni-list"></ul>
+
+          <p id="empty-list" class="hint">No universities yet. Add your first one with the form.</p>
+        </section>
+
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- TAB 2: PROFILE                                             -->
+    <!-- ========================================================= -->
+    <section id="profile-tab" class="tab-content" hidden>
+      <div class="profile-intro">
+        <h2>My Profile</h2>
+        <p>Write things once here, then copy them into applications. Everything saves automatically as you type.</p>
+      </div>
+
+      <div class="profile-grid">
+        <!-- Each box has: a title, a Copy button, a text area, and a small status line.
+             data-key is the name we save it under in localStorage. -->
+
+        <div class="panel profile-box">
+          <div class="profile-box-header">
+            <label for="profile-personal">Personal information</label>
+            <button class="button small copy-button" data-target="profile-personal">Copy</button>
+          </div>
+          <textarea id="profile-personal" class="profile-field" data-key="personal" rows="8"
+            placeholder="Full name, date of birth, nationality, school, email, phone..."></textarea>
+          <p class="profile-status" data-for="profile-personal"></p>
+        </div>
+
+        <div class="panel profile-box">
+          <div class="profile-box-header">
+            <label for="profile-notes">Notes about myself</label>
+            <button class="button small copy-button" data-target="profile-notes">Copy</button>
+          </div>
+          <textarea id="profile-notes" class="profile-field" data-key="notes" rows="8"
+            placeholder="Strengths, hobbies, achievements, things I want to mention..."></textarea>
+          <p class="profile-status" data-for="profile-notes"></p>
+        </div>
+
+        <!-- The personal statement gets the full width because it is the longest -->
+        <div class="panel profile-box wide">
+          <div class="profile-box-header">
+            <label for="profile-statement">Personal statement</label>
+            <button class="button small copy-button" data-target="profile-statement">Copy</button>
+          </div>
+          <textarea id="profile-statement" class="profile-field" data-key="statement" rows="14"
+            placeholder="Why I want to study this subject, what I've done to explore it, and what I'll bring..."></textarea>
+          <!-- UCAS personal statements have a 4,000 character limit, so we count characters -->
+          <p class="profile-status" data-for="profile-statement" data-limit="4000"></p>
+        </div>
+
+        <div class="panel profile-box wide">
+          <div class="profile-box-header">
+            <label for="profile-snippets">Useful bits for applications</label>
+            <button class="button small copy-button" data-target="profile-snippets">Copy</button>
+          </div>
+          <textarea id="profile-snippets" class="profile-field" data-key="snippets" rows="8"
+            placeholder="Short answers, work experience descriptions, referee details, anything I reuse often..."></textarea>
+          <p class="profile-status" data-for="profile-snippets"></p>
+        </div>
+      </div>
     </section>
 
   </main>
 
   <footer>
-    <p>Your list is saved in this browser, so it will still be here next time you visit.</p>
+    <p>Everything is saved in this browser only, so it stays private to you.</p>
   </footer>
 
-  <!-- Link to our JavaScript file (makes the page interactive).
-       It goes at the bottom so the page loads before the script runs. -->
+  <!-- Leaflet: the map library's code. It must load BEFORE script.js uses it. -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Our own code -->
   <script src="script.js"></script>
 </body>
 </html>
