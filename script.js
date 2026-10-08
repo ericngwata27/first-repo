@@ -765,25 +765,36 @@ function roundLabel(item) {
 //   -> [{ label: "Round 1", date: "2026-11-15" }, { label: "Round 2", date: "2027-01-15" }]
 // Rounds without a readable date are left out.
 // Words that start a round's name ("Round 1", "Early Decision", ...).
-// Anything written before them is the campus.
-const ROUND_WORDS = /\b(?:round|stage|phase|early decision|early action|restrictive early action|regular decision|priority|main|final|deadline)\b/i;
+// Anything written before them can be the campus ("Paris Round 1").
+// "deadline" isn't one of them: in "Application deadline" or
+// "Early bird deadline" the first word is not a campus.
+const ROUND_WORDS = /\b(?:round|stage|phase|early decision|early action|restrictive early action|regular decision)\b/i;
+
+// Words that describe applicants or deadlines, never a campus
+const NOT_CAMPUS = /\b(?:applicants?|students?|international|domestic|home|overseas|eu|non-eu|deadline|application|early bird|priority|regular|main|final|general|standard)\b/i;
 
 // "Paris: Round 1 - 18 November" -> { campus: "Paris", rest: "Round 1 - 18 November" }
 // "Paris/Madrid Round 1 - 18 Nov" -> { campus: "Paris/Madrid", rest: "Round 1 - 18 Nov" }
 // "Round 1 - 18 November"        -> { campus: "", rest: "Round 1 - 18 November" }
+// "Application deadline - 30 Jun" -> { campus: "", rest: "Application deadline - 30 Jun" }
 function splitCampus(item) {
   const text = item.trim();
+  const tidy = function (campus) {
+    return campus.replace(/\s*campus$/i, "").trim();   // "Paris campus" -> "Paris"
+  };
+  const isCampus = function (before) {
+    return before && !/\d/.test(before) && !NOT_CAMPUS.test(before) && !ROUND_WORDS.test(before);
+  };
+
   const colon = text.indexOf(":");
   if (colon > 0) {
-    const before = text.slice(0, colon).trim();
-    if (!ROUND_WORDS.test(before) && !/\d/.test(before)) {
-      return { campus: before, rest: text.slice(colon + 1).trim() };
-    }
+    const before = tidy(text.slice(0, colon));
+    if (isCampus(before)) return { campus: before, rest: text.slice(colon + 1).trim() };
   }
   const roundWord = text.search(ROUND_WORDS);
   if (roundWord > 0) {
-    const before = text.slice(0, roundWord).replace(/[-:,\s]+$/, "").trim();
-    if (before && !/\d/.test(before)) return { campus: before, rest: text.slice(roundWord) };
+    const before = tidy(text.slice(0, roundWord).replace(/[-:,\s]+$/, ""));
+    if (isCampus(before)) return { campus: before, rest: text.slice(roundWord) };
   }
   return { campus: "", rest: text };
 }

@@ -816,10 +816,19 @@ function buildCard(uni) {
   }
 
   // Apply the recommended plan: set the submission date and move the
-  // planner's milestone dates to fit it (dates you typed stay put)
-  function applyPlan() {
+  // planner's milestone dates to fit it (milestone dates you typed stay put).
+  // force = true for "Plan for me" (you asked for it). Otherwise a planned
+  // date you typed yourself is kept, and we tell you how to update it.
+  function applyPlan(force) {
     const plan = recommendPlan(uni, entry, analyseAdmissions(uni, entry));
     if (!plan.plannedDate) return false;
+    if (!force && entry.plannedDate && !entry.plannedAuto) {
+      if (entry.plannedDate !== plan.plannedDate) {
+        showToast("Kept your planned date (" + formatDate(entry.plannedDate) + "). The new recommendation is " +
+          formatDate(plan.plannedDate) + ": click Plan for me to use it.", "info");
+      }
+      return false;
+    }
     entry.plannedDate = plan.plannedDate;
     entry.plannedAuto = true;
     plannedInput.value = entry.plannedDate;
@@ -1092,7 +1101,7 @@ function buildCard(uni) {
   planButton.type = "button";
   planButton.append(makeIcon("sparkles"), "Plan for me");
   planButton.addEventListener("click", function () {
-    if (applyPlan()) {
+    if (applyPlan(true)) {
       showToast("Planned: submit by " + formatDate(entry.plannedDate) + ". Dates you set yourself weren't changed.");
     } else {
       showToast("No deadline or round known yet. Add one first.", "circle-alert");
