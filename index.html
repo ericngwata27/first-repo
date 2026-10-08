@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Basic page settings -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Future Planner</title>
+
+  <!-- Link to our stylesheet (controls how the page looks) -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Top banner ===== -->
+  <header>
+    <h1>My Future Planner</h1>
+    <p>Compare universities and jobs side by side to help decide what's next.</p>
+  </header>
+
+  <main>
+
+    <!-- ===== Form for adding a new option ===== -->
+    <section class="card">
+      <h2>Add an option</h2>
+
+      <form id="option-form">
+        <label for="type">Type</label>
+        <select id="type">
+          <option value="University">University</option>
+          <option value="Job">Job</option>
+        </select>
+
+        <label for="name">Name</label>
+        <input id="name" type="text" placeholder="e.g. University of Toronto or Junior Designer" required>
+
+        <label for="location">Location</label>
+        <input id="location" type="text" placeholder="e.g. Toronto, Canada">
+
+        <label for="money">Yearly cost (university) or salary (job)</label>
+        <input id="money" type="number" min="0" placeholder="e.g. 25000">
+
+        <label for="rating">How much do I like it? (1 to 5)</label>
+        <input id="rating" type="number" min="1" max="5" value="3">
+
+        <label for="notes">Pros, cons, and notes</label>
+        <textarea id="notes" rows="3" placeholder="e.g. Great program, but far from home"></textarea>
+
+        <button type="submit">Add to my list</button>
+      </form>
+    </section>
+
+    <!-- ===== Buttons to filter the list ===== -->
+    <section class="card">
+      <h2>My options</h2>
+
+      <div class="filters">
+        <button class="filter active" data-filter="All">All</button>
+        <button class="filter" data-filter="University">Universities</button>
+        <button class="filter" data-filter="Job">Jobs</button>
+      </div>
+
+      <!-- script.js fills this area with one card per option -->
+      <div id="options-list"></div>
+
+      <!-- Shown only when the list is empty -->
+      <p id="empty-message">Nothing here yet. Add your first option above!</p>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Your list is saved in this browser, so it will still be here next time you visit.</p>
+  </footer>
+
+  <!-- Link to our JavaScript file (makes the page interactive).
+       It goes at the bottom so the page loads before the script runs. -->
+  <script src="script.js"></script>
+</body>
+</html>
