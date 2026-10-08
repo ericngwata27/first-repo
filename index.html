@@ -6,12 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Future Planner</title>
 
-  <!-- Fonts from Google Fonts -->
+  <!-- Fonts: "Manrope" for headings, "Figtree" for everything else -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Figtree:wght@400;500;600&display=swap">
 
-  <!-- Leaflet: the map library's stylesheet (makes the map look right) -->
+  <!-- Leaflet: the map library's stylesheet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
   <!-- Our own stylesheet -->
@@ -19,177 +19,306 @@
 </head>
 <body>
 
-  <!-- ===== Top bar with the app name and the two tabs ===== -->
-  <header class="topbar">
-    <div class="brand">
-      <h1>My Future Planner</h1>
-      <p>Every university I'm considering, on one map.</p>
-    </div>
+  <!-- =========================================================
+       HEADER: logo on the left, tabs on the right.
+       It "sticks" to the top of the screen while you scroll.
+       ========================================================= -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="logo">
+        <span class="logo-mark"><i data-lucide="graduation-cap"></i></span>
+        <span class="logo-text">
+          <strong>My Future Planner</strong>
+          <small>University applications, mapped</small>
+        </span>
+      </div>
 
-    <!-- The tabs. Each button says which section it opens using data-tab. -->
-    <nav class="tabs">
-      <button class="tab active" data-tab="universities-tab">Universities</button>
-      <button class="tab" data-tab="profile-tab">Profile</button>
-    </nav>
+      <!-- The tabs. data-tab says which section each one opens. -->
+      <nav class="tabs" aria-label="Sections">
+        <button class="tab is-active" data-tab="universities-tab">
+          <i data-lucide="map"></i> Universities
+        </button>
+        <button class="tab" data-tab="profile-tab">
+          <i data-lucide="user"></i> Profile
+        </button>
+      </nav>
+    </div>
   </header>
 
-  <main>
+  <main class="container">
 
-    <!-- ========================================================= -->
-    <!-- TAB 1: UNIVERSITIES                                        -->
-    <!-- ========================================================= -->
+    <!-- =========================================================
+         TAB 1: UNIVERSITIES
+         ========================================================= -->
     <section id="universities-tab" class="tab-content">
 
-      <!-- Map on the left, details panel on the right -->
-      <div class="map-area">
+      <!-- ----- Summary numbers at the top ----- -->
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Universities</span>
+          <strong class="stat-value" id="stat-total">0</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Countries</span>
+          <strong class="stat-value" id="stat-countries">0</strong>
+        </div>
+        <div class="stat stat-wide">
+          <span class="stat-label">Next deadline</span>
+          <strong class="stat-value" id="stat-next">None yet</strong>
+        </div>
+      </div>
+
+      <!-- ----- The map, with the details panel sliding in on top of it ----- -->
+      <div class="map-wrap">
         <!-- Leaflet draws the map inside this empty div -->
         <div id="map"></div>
 
-        <!-- Details of the selected university. script.js fills this in. -->
-        <aside id="details-panel" class="panel">
-          <div class="panel-empty">
-            <h2>Pick a university</h2>
-            <p>Click a pin on the map or a university in the list to see everything you've saved about it.</p>
-          </div>
+        <!-- Details of the selected university. script.js fills in .panel-body -->
+        <aside id="details-panel" class="details-panel" aria-live="polite">
+          <button class="icon-button panel-close" id="close-panel" title="Close" aria-label="Close details">
+            <i data-lucide="x"></i>
+          </button>
+          <div class="panel-body" id="panel-body"></div>
         </aside>
+
+        <!-- Legend explaining the pin colors -->
+        <div class="legend">
+          <span><i class="dot dot-later"></i> 45+ days</span>
+          <span><i class="dot dot-soon"></i> 15–45 days</span>
+          <span><i class="dot dot-urgent"></i> Under 15 days</span>
+          <span><i class="dot dot-none"></i> Closed / no date</span>
+        </div>
       </div>
 
-      <!-- Form on the left, list on the right -->
-      <div class="bottom-area">
+      <!-- ----- Form on the left, list on the right ----- -->
+      <div class="work-area">
 
-        <!-- ----- Add / edit form ----- -->
-        <section class="panel">
-          <h2 id="form-title">Add a university</h2>
-
-          <form id="uni-form">
-            <label for="name">University name *</label>
-            <input id="name" type="text" required placeholder="e.g. University of Edinburgh">
-
-            <label for="course">Course I'm interested in *</label>
-            <input id="course" type="text" required placeholder="e.g. BSc Computer Science">
-
-            <!-- Two fields side by side -->
-            <div class="field-row">
-              <div>
-                <label for="city">City *</label>
-                <input id="city" type="text" required placeholder="e.g. Edinburgh">
-              </div>
-              <div>
-                <label for="country">Country *</label>
-                <input id="country" type="text" required placeholder="e.g. United Kingdom">
-              </div>
+        <!-- ===== Add / edit form ===== -->
+        <section class="card form-card" id="form-card">
+          <div class="card-header">
+            <div>
+              <h2 id="form-title">Add a university</h2>
+              <p class="muted" id="form-subtitle">We'll find it on the map for you.</p>
             </div>
+          </div>
 
-            <label for="deadline">Application deadline</label>
-            <input id="deadline" type="date">
+          <!-- novalidate turns off the browser's own pop-ups so we can show nicer messages -->
+          <form id="uni-form" novalidate>
 
-            <label for="requirements">Required grades / entry requirements</label>
-            <textarea id="requirements" rows="2" placeholder="e.g. AAA at A-level including Maths, or IB 38 points"></textarea>
+            <!-- Group 1: the basics -->
+            <fieldset>
+              <legend>The basics</legend>
 
-            <label for="application-info">Application info</label>
-            <textarea id="application-info" rows="2" placeholder="e.g. Apply through UCAS. Needs a personal statement and one reference."></textarea>
-
-            <div class="field-row">
-              <div>
-                <label for="pros">Pros</label>
-                <textarea id="pros" rows="3" placeholder="One per line"></textarea>
+              <div class="field">
+                <label for="name"><i data-lucide="building-2"></i> University name <span class="required">*</span></label>
+                <input id="name" type="text" placeholder="e.g. University of Edinburgh" autocomplete="off">
+                <p class="field-error" id="name-error"></p>
               </div>
-              <div>
-                <label for="cons">Cons</label>
-                <textarea id="cons" rows="3" placeholder="One per line"></textarea>
-              </div>
-            </div>
 
-            <!-- Messages like "Finding location..." appear here -->
+              <div class="field">
+                <label for="course"><i data-lucide="book-open"></i> Course <span class="required">*</span></label>
+                <input id="course" type="text" placeholder="e.g. BSc Computer Science" autocomplete="off">
+                <p class="field-error" id="course-error"></p>
+              </div>
+            </fieldset>
+
+            <!-- Group 2: where it is -->
+            <fieldset>
+              <legend>Location</legend>
+              <div class="field-row">
+                <div class="field">
+                  <label for="city"><i data-lucide="map-pin"></i> City <span class="required">*</span></label>
+                  <input id="city" type="text" placeholder="e.g. Edinburgh" autocomplete="off">
+                  <p class="field-error" id="city-error"></p>
+                </div>
+                <div class="field">
+                  <label for="country"><i data-lucide="globe"></i> Country <span class="required">*</span></label>
+                  <input id="country" type="text" placeholder="e.g. United Kingdom" autocomplete="off">
+                  <p class="field-error" id="country-error"></p>
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Group 3: applying -->
+            <fieldset>
+              <legend>Applying</legend>
+
+              <div class="field">
+                <label for="deadline"><i data-lucide="calendar"></i> Application deadline</label>
+                <input id="deadline" type="date">
+                <p class="field-error" id="deadline-error"></p>
+              </div>
+
+              <div class="field">
+                <label for="requirements"><i data-lucide="award"></i> Entry requirements</label>
+                <textarea id="requirements" rows="2" placeholder="e.g. AAA at A-level including Maths, or IB 38 points"></textarea>
+              </div>
+
+              <div class="field">
+                <label for="application-info"><i data-lucide="file-text"></i> How to apply</label>
+                <textarea id="application-info" rows="2" placeholder="e.g. Apply through UCAS. Needs a personal statement and one reference."></textarea>
+              </div>
+            </fieldset>
+
+            <!-- Group 4: your opinion -->
+            <fieldset>
+              <legend>Your thoughts</legend>
+              <div class="field-row">
+                <div class="field">
+                  <label for="pros"><i data-lucide="thumbs-up"></i> Pros</label>
+                  <textarea id="pros" rows="3" placeholder="One per line"></textarea>
+                </div>
+                <div class="field">
+                  <label for="cons"><i data-lucide="thumbs-down"></i> Cons</label>
+                  <textarea id="cons" rows="3" placeholder="One per line"></textarea>
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Messages like "Finding Edinburgh on the map..." appear here -->
             <p id="form-message" class="form-message" role="status"></p>
 
-            <div class="button-row">
-              <button type="submit" id="submit-button" class="button primary">Add to map</button>
+            <div class="form-actions">
+              <button type="submit" id="submit-button" class="button button-primary">
+                <i data-lucide="plus"></i> <span id="submit-label">Add to map</span>
+              </button>
               <!-- Only shown while editing -->
               <button type="button" id="cancel-edit" class="button" hidden>Cancel</button>
             </div>
           </form>
         </section>
 
-        <!-- ----- List of all universities ----- -->
-        <section class="panel">
-          <h2>My universities <span id="uni-count" class="count">0</span></h2>
-          <p class="hint">Sorted by deadline, soonest first.</p>
+        <!-- ===== List of all universities ===== -->
+        <section class="card list-card">
+          <div class="card-header">
+            <div>
+              <h2>My universities</h2>
+              <p class="muted">Sorted by deadline, soonest first.</p>
+            </div>
+          </div>
 
-          <!-- script.js adds one item per university here -->
+          <!-- script.js adds one card per university here -->
           <ul id="uni-list" class="uni-list"></ul>
 
-          <p id="empty-list" class="hint">No universities yet. Add your first one with the form.</p>
+          <!-- Shown when there are no universities yet -->
+          <div id="empty-list" class="empty-state">
+            <span class="empty-icon"><i data-lucide="map-pin"></i></span>
+            <h3>No universities yet</h3>
+            <p>Add your first one with the form. It will appear here and on the map.</p>
+          </div>
         </section>
 
       </div>
     </section>
 
-    <!-- ========================================================= -->
-    <!-- TAB 2: PROFILE                                             -->
-    <!-- ========================================================= -->
+    <!-- =========================================================
+         TAB 2: PROFILE
+         Every text box has data-key: the name it's saved under.
+         ========================================================= -->
     <section id="profile-tab" class="tab-content" hidden>
+
       <div class="profile-intro">
-        <h2>My Profile</h2>
-        <p>Write things once here, then copy them into applications. Everything saves automatically as you type.</p>
+        <h2>My profile</h2>
+        <p class="muted">Write things once, then copy them into any application. Everything saves automatically as you type.</p>
       </div>
 
-      <div class="profile-grid">
-        <!-- Each box has: a title, a Copy button, a text area, and a small status line.
-             data-key is the name we save it under in localStorage. -->
-
-        <div class="panel profile-box">
-          <div class="profile-box-header">
-            <label for="profile-personal">Personal information</label>
-            <button class="button small copy-button" data-target="profile-personal">Copy</button>
-          </div>
-          <textarea id="profile-personal" class="profile-field" data-key="personal" rows="8"
-            placeholder="Full name, date of birth, nationality, school, email, phone..."></textarea>
-          <p class="profile-status" data-for="profile-personal"></p>
+      <!-- ----- Section: About me ----- -->
+      <section class="profile-section">
+        <div class="section-heading">
+          <h3>About me</h3>
+          <p class="muted">The facts every application asks for.</p>
         </div>
 
-        <div class="panel profile-box">
-          <div class="profile-box-header">
-            <label for="profile-notes">Notes about myself</label>
-            <button class="button small copy-button" data-target="profile-notes">Copy</button>
+        <div class="profile-grid">
+          <div class="card profile-card">
+            <label class="profile-label" for="profile-personal"><i data-lucide="user"></i> Personal info</label>
+            <textarea id="profile-personal" class="profile-field" data-key="personal" rows="7"
+              placeholder="Full name, date of birth, nationality, school, email, phone..."></textarea>
+            <div class="profile-footer">
+              <span class="profile-status" id="profile-personal-status"></span>
+              <button class="button button-small copy-button" data-target="profile-personal"><i data-lucide="copy"></i> <span>Copy to clipboard</span></button>
+            </div>
           </div>
-          <textarea id="profile-notes" class="profile-field" data-key="notes" rows="8"
-            placeholder="Strengths, hobbies, achievements, things I want to mention..."></textarea>
-          <p class="profile-status" data-for="profile-notes"></p>
+
+          <div class="card profile-card">
+            <label class="profile-label" for="profile-achievements"><i data-lucide="trophy"></i> Achievements</label>
+            <textarea id="profile-achievements" class="profile-field" data-key="achievements" rows="7"
+              placeholder="Awards, grades, competitions, leadership roles, volunteering..."></textarea>
+            <div class="profile-footer">
+              <span class="profile-status" id="profile-achievements-status"></span>
+              <button class="button button-small copy-button" data-target="profile-achievements"><i data-lucide="copy"></i> <span>Copy to clipboard</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ----- Section: Personal statement ----- -->
+      <section class="profile-section">
+        <div class="section-heading">
+          <h3>Personal statement</h3>
+          <p class="muted">UCAS allows up to 4,000 characters. The bar shows how much you've used.</p>
         </div>
 
-        <!-- The personal statement gets the full width because it is the longest -->
-        <div class="panel profile-box wide">
-          <div class="profile-box-header">
-            <label for="profile-statement">Personal statement</label>
-            <button class="button small copy-button" data-target="profile-statement">Copy</button>
-          </div>
-          <textarea id="profile-statement" class="profile-field" data-key="statement" rows="14"
+        <div class="card profile-card">
+          <label class="profile-label" for="profile-statement"><i data-lucide="file-text"></i> Personal statement</label>
+          <textarea id="profile-statement" class="profile-field" data-key="statement" data-limit="4000" rows="14"
             placeholder="Why I want to study this subject, what I've done to explore it, and what I'll bring..."></textarea>
-          <!-- UCAS personal statements have a 4,000 character limit, so we count characters -->
-          <p class="profile-status" data-for="profile-statement" data-limit="4000"></p>
+          <!-- Progress bar for the 4,000 character limit -->
+          <div class="meter"><div class="meter-fill" id="statement-meter"></div></div>
+          <div class="profile-footer">
+            <span class="profile-status" id="profile-statement-status"></span>
+            <button class="button button-small copy-button" data-target="profile-statement"><i data-lucide="copy"></i> <span>Copy to clipboard</span></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ----- Section: Notes ----- -->
+      <section class="profile-section">
+        <div class="section-heading">
+          <h3>Notes</h3>
+          <p class="muted">Anything else worth keeping handy.</p>
         </div>
 
-        <div class="panel profile-box wide">
-          <div class="profile-box-header">
-            <label for="profile-snippets">Useful bits for applications</label>
-            <button class="button small copy-button" data-target="profile-snippets">Copy</button>
+        <div class="profile-grid">
+          <div class="card profile-card">
+            <label class="profile-label" for="profile-notes"><i data-lucide="sticky-note"></i> Notes about myself</label>
+            <textarea id="profile-notes" class="profile-field" data-key="notes" rows="7"
+              placeholder="Strengths, hobbies, things I want to mention in interviews..."></textarea>
+            <div class="profile-footer">
+              <span class="profile-status" id="profile-notes-status"></span>
+              <button class="button button-small copy-button" data-target="profile-notes"><i data-lucide="copy"></i> <span>Copy to clipboard</span></button>
+            </div>
           </div>
-          <textarea id="profile-snippets" class="profile-field" data-key="snippets" rows="8"
-            placeholder="Short answers, work experience descriptions, referee details, anything I reuse often..."></textarea>
-          <p class="profile-status" data-for="profile-snippets"></p>
+
+          <div class="card profile-card">
+            <label class="profile-label" for="profile-snippets"><i data-lucide="clipboard-list"></i> Reusable answers</label>
+            <textarea id="profile-snippets" class="profile-field" data-key="snippets" rows="7"
+              placeholder="Short answers, work experience descriptions, referee details..."></textarea>
+            <div class="profile-footer">
+              <span class="profile-status" id="profile-snippets-status"></span>
+              <button class="button button-small copy-button" data-target="profile-snippets"><i data-lucide="copy"></i> <span>Copy to clipboard</span></button>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
     </section>
 
   </main>
 
-  <footer>
-    <p>Everything is saved in this browser only, so it stays private to you.</p>
+  <!-- ===== Footer ===== -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>&copy; <span id="year"></span> My Future Planner</p>
+      <p class="muted">Your data is saved in this browser only.</p>
+    </div>
   </footer>
 
-  <!-- Leaflet: the map library's code. It must load BEFORE script.js uses it. -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Pop-up messages ("toasts") appear in this corner -->
+  <div id="toast-area" class="toast-area" aria-live="polite"></div>
+
+  <!-- Libraries: they must load BEFORE script.js uses them -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>   <!-- the map -->
+  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script> <!-- the icons -->
 
   <!-- Our own code -->
   <script src="script.js"></script>

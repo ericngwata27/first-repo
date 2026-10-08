@@ -1,16 +1,30 @@
 // =========================================================
 // MY FUTURE PLANNER
-// This file makes the page interactive. It is split into
-// numbered sections so you can find things easily.
+// This file makes the page interactive. It's split into
+// numbered sections so you can find things easily:
+//
+//   1. Saving and loading
+//   2. Small helpers
+//   3. Deadlines (how close, which color)
+//   4. Tabs
+//   5. The map
+//   6. Finding a location's coordinates
+//   7. The form (with validation)
+//   8. The university list
+//   9. The details panel
+//  10. Summary stats
+//  11. Toasts (pop-up messages)
+//  12. The Profile tab
+//  13. Start the app
 // =========================================================
 
 
 // =========================================================
 // 1. SAVING AND LOADING
-// localStorage is a small storage space in your browser.
-// Data saved there is still there after you close the page.
-// It can only store text, so we turn our data into text with
-// JSON.stringify, and back into data with JSON.parse.
+// localStorage is a small storage space in your browser that
+// keeps data after you close the page. It only stores text,
+// so we convert with JSON.stringify (data -> text) and
+// JSON.parse (text -> data).
 // =========================================================
 
 const STORAGE_KEY = "future-planner-universities";
@@ -33,33 +47,128 @@ function saveUniversities() {
   }
 }
 
-// This is our main "data structure": a list (array) of university objects.
-// Each university looks like this:
+// Our main data: a list of university objects. One looks like this:
 // {
-//   id: 1712345678901,               a unique number
+//   id: 1712345678901,                 a unique number
 //   name: "University of Edinburgh",
 //   course: "BSc Computer Science",
 //   city: "Edinburgh",
 //   country: "United Kingdom",
-//   deadline: "2027-01-15",           year-month-day, or "" if not set
+//   deadline: "2027-01-15",             year-month-day, or "" if not set
 //   requirements: "AAA at A-level",
 //   applicationInfo: "Apply through UCAS",
 //   pros: "Beautiful city\nStrong CS department",
 //   cons: "Cold winters",
-//   lat: 55.94, lng: -3.18            where to put the pin on the map
+//   lat: 55.94, lng: -3.18              where the pin goes on the map
 // }
 let universities = loadUniversities();
 
-// The id of the university shown in the details panel (or null if none)
-let selectedId = null;
-
-// The id of the university being edited in the form (or null when adding)
-let editingId = null;
+let selectedId = null;  // the university shown in the details panel
+let editingId = null;   // the university being edited in the form
+let newestId = null;    // the one just added (so its card can animate in)
 
 
 // =========================================================
-// 2. TABS
-// Clicking a tab shows its section and hides the others.
+// 2. SMALL HELPERS
+// =========================================================
+
+// Create an element, optionally with a class and some text.
+// Using textContent means anything you typed is always shown
+// as plain text, never run as code.
+function makeElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text) element.textContent = text;
+  return element;
+}
+
+// Create an icon. The Lucide library turns <i data-lucide="name">
+// into a drawing when we call refreshIcons().
+function makeIcon(name) {
+  const icon = document.createElement("i");
+  icon.setAttribute("data-lucide", name);
+  return icon;
+}
+
+function refreshIcons() {
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+}
+
+function findUniversity(id) {
+  return universities.find(function (uni) {
+    return uni.id === id;
+  });
+}
+
+
+// =========================================================
+// 3. DEADLINES
+// Works out how many days are left and picks a color level:
+//   "later"  = green  (45+ days)
+//   "soon"   = amber  (15 to 44 days)
+//   "urgent" = red    (under 15 days)
+//   "none"   = gray   (no date, or already passed)
+// =========================================================
+
+// Turn "2027-01-15" into a date. We split it ourselves so the
+// date doesn't shift because of time zones.
+function parseDate(text) {
+  const parts = text.split("-");
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+}
+
+function daysUntil(dateText) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((parseDate(dateText) - today) / millisecondsPerDay);
+}
+
+// Show a date in a friendly way, e.g. "15 Jan 2027"
+function formatDate(dateText) {
+  return parseDate(dateText).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getDeadlineStatus(dateText) {
+  if (!dateText) {
+    return { level: "none", label: "No deadline" };
+  }
+
+  const days = daysUntil(dateText);
+
+  if (days < 0) return { level: "none", label: "Closed", days: days };
+  if (days === 0) return { level: "urgent", label: "Due today", days: days };
+
+  const label = days === 1 ? "1 day left" : days + " days left";
+  if (days < 15) return { level: "urgent", label: label, days: days };
+  if (days < 45) return { level: "soon", label: label, days: days };
+  return { level: "later", label: label, days: days };
+}
+
+// The small colored label, e.g. "● 12 days left"
+function makeDeadlineChip(dateText) {
+  const status = getDeadlineStatus(dateText);
+  return makeElement("span", "chip level-" + status.level, status.label);
+}
+
+// Soonest deadline first; universities without a date go last
+function sortByDeadline(list) {
+  return list.slice().sort(function (a, b) {
+    if (!a.deadline) return 1;
+    if (!b.deadline) return -1;
+    return parseDate(a.deadline) - parseDate(b.deadline);
+  });
+}
+
+
+// =========================================================
+// 4. TABS
 // =========================================================
 
 const tabButtons = document.querySelectorAll(".tab");
@@ -68,9 +177,9 @@ tabButtons.forEach(function (button) {
   button.addEventListener("click", function () {
     // Highlight only the clicked tab
     tabButtons.forEach(function (b) {
-      b.classList.remove("active");
+      b.classList.remove("is-active");
     });
-    button.classList.add("active");
+    button.classList.add("is-active");
 
     // Hide every section, then show the one this tab points to
     document.querySelectorAll(".tab-content").forEach(function (section) {
@@ -78,60 +187,67 @@ tabButtons.forEach(function (button) {
     });
     document.getElementById(button.dataset.tab).hidden = false;
 
-    // A map that was hidden doesn't know its size, so we tell it to re-measure
-    if (map) {
-      map.invalidateSize();
-    }
+    // A map that was hidden doesn't know its size, so we ask it to re-measure
+    if (map) map.invalidateSize();
   });
 });
 
 
 // =========================================================
-// 3. THE MAP (using the Leaflet library)
-// Leaflet is loaded in index.html and gives us the "L" object.
+// 5. THE MAP (using the Leaflet library)
 // =========================================================
 
 let map = null;
-const markers = {}; // remembers each pin, so we can find it by university id
+const markers = {}; // each pin, stored by university id
+
+// The graduation cap drawing used inside each pin
+const CAP_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/>' +
+  '<path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>';
 
 if (typeof L === "undefined") {
   // Leaflet loads from the internet. If you're offline, show a message instead.
-  document.getElementById("map").innerHTML =
-    '<p class="hint" style="padding:20px">The map needs an internet connection to load.</p>';
+  const message = makeElement("p", "muted", "The map needs an internet connection to load.");
+  message.style.padding = "24px";
+  document.getElementById("map").appendChild(message);
 } else {
-  // Create the map inside <div id="map"> and start with a view of the whole world.
-  // setView takes [latitude, longitude] and a zoom level (2 = whole world).
-  map = L.map("map", { worldCopyJump: true }).setView([25, 10], 2);
+  // Start with a view of the whole world: [latitude, longitude], zoom level 2
+  map = L.map("map", { worldCopyJump: true, zoomControl: false }).setView([30, 10], 2);
 
-  // The map pictures ("tiles") come from Esri. They're free to use and,
-  // unlike some other providers, work without an API key even when you
-  // open index.html straight from your computer.
+  // Zoom buttons in the bottom-right, out of the details panel's way
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+
+  // Map pictures ("tiles") from Esri. Free, and no API key needed.
   const esriTiles = "https://server.arcgisonline.com/ArcGIS/rest/services/";
 
   const streetMap = L.tileLayer(esriTiles + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "Tiles &copy; Esri &mdash; Sources: Esri, HERE, Garmin, OpenStreetMap contributors, and the GIS community",
+    attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors",
     maxZoom: 19,
+    className: "tiles-street", // lets style.css soften the colors
   });
 
   const satelliteMap = L.tileLayer(esriTiles + "World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "Tiles &copy; Esri &mdash; Sources: Esri, Maxar, Earthstar Geographics, and the GIS community",
+    attribution: "Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics",
     maxZoom: 19,
   });
 
-  // Show the street map to start with
   streetMap.addTo(map);
 
-  // A small button in the top-right corner of the map to switch map styles
-  L.control.layers({ "Street map": streetMap, "Satellite": satelliteMap }).addTo(map);
+  // Button to switch between street map and satellite, in the top-left corner
+  L.control.layers({ "Street map": streetMap, "Satellite": satelliteMap }, null, { position: "topleft" }).addTo(map);
 }
 
-// Make the pin shape. We use our own design (see .pin in style.css).
-function makePinIcon(isSelected) {
+// Build a pin. Its color comes from the deadline.
+function makePinIcon(uni, isSelected) {
+  const level = getDeadlineStatus(uni.deadline).level;
   return L.divIcon({
     className: "", // stops Leaflet adding its default white square
-    html: '<div class="pin' + (isSelected ? " selected" : "") + '"></div>',
-    iconSize: [26, 26],
-    iconAnchor: [13, 30], // the point of the pin that touches the location
+    html: '<div class="pin level-' + level +
+      (isSelected ? " is-selected" : "") +
+      (uni.id === newestId ? " is-new" : "") + '">' + CAP_ICON + "</div>",
+    iconSize: [34, 34],
+    iconAnchor: [17, 40], // the tip of the pin touches the location
   });
 }
 
@@ -139,28 +255,25 @@ function makePinIcon(isSelected) {
 function drawPins() {
   if (!map) return;
 
-  // Remove the old pins
   Object.keys(markers).forEach(function (id) {
     markers[id].remove();
     delete markers[id];
   });
 
-  // Add a pin for each university
   universities.forEach(function (uni) {
     const marker = L.marker([uni.lat, uni.lng], {
-      icon: makePinIcon(uni.id === selectedId),
-      title: uni.name,
+      icon: makePinIcon(uni, uni.id === selectedId),
+      riseOnHover: true,                    // hovered pin comes to the front
+      zIndexOffset: uni.id === selectedId ? 1000 : 0,
     }).addTo(map);
 
-    // A small label that appears when you hover over the pin.
-    // We build it as an element with textContent so it's always plain text.
-    const label = document.createElement("span");
-    label.textContent = uni.name;
-    marker.bindTooltip(label, { direction: "top", offset: [0, -30] });
+    // Tooltip shown on hover: name, plus city underneath
+    const tooltip = document.createElement("div");
+    tooltip.append(makeElement("strong", "", uni.name), makeElement("span", "", uni.city + ", " + uni.country));
+    marker.bindTooltip(tooltip, { direction: "top", offset: [0, -42], className: "pin-tooltip" });
 
-    // Clicking the pin shows the details panel
     marker.on("click", function () {
-      selectUniversity(uni.id);
+      selectUniversity(uni.id, false);
     });
 
     markers[uni.id] = marker;
@@ -174,15 +287,14 @@ function zoomToAllPins() {
   const points = universities.map(function (uni) {
     return [uni.lat, uni.lng];
   });
-  map.fitBounds(points, { padding: [50, 50], maxZoom: 6 });
+  map.fitBounds(points, { padding: [60, 60], maxZoom: 6 });
 }
 
 
 // =========================================================
-// 4. FINDING A LOCATION'S COORDINATES ("geocoding")
-// A map needs latitude and longitude, not "Edinburgh, UK".
-// We ask a free service called Nominatim (from OpenStreetMap)
-// to turn the words into numbers.
+// 6. FINDING A LOCATION'S COORDINATES ("geocoding")
+// The map needs numbers (latitude and longitude), not words.
+// A free OpenStreetMap service called Nominatim converts them.
 // =========================================================
 
 async function searchLocation(query) {
@@ -191,33 +303,34 @@ async function searchLocation(query) {
   const response = await fetch(url);
   const results = await response.json();
 
-  if (results.length === 0) {
-    return null; // nothing found
-  }
+  if (results.length === 0) return null;
   return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
 }
 
 async function findCoordinates(name, city, country) {
-  // First try to find the university itself, so the pin lands on the campus...
+  // Try the university itself first, so the pin lands on the campus...
   const exact = await searchLocation(name + ", " + city + ", " + country);
   if (exact) return exact;
 
-  // ...and if that doesn't work, just use the city
+  // ...otherwise use the city
   return await searchLocation(city + ", " + country);
 }
 
 
 // =========================================================
-// 5. THE ADD / EDIT FORM
+// 7. THE FORM (with validation)
 // =========================================================
 
 const form = document.getElementById("uni-form");
+const formCard = document.getElementById("form-card");
 const formTitle = document.getElementById("form-title");
+const formSubtitle = document.getElementById("form-subtitle");
 const formMessage = document.getElementById("form-message");
 const submitButton = document.getElementById("submit-button");
+const submitLabel = document.getElementById("submit-label");
 const cancelEditButton = document.getElementById("cancel-edit");
 
-// The names of the form fields, matched to the id of each input box
+// Which data property goes with which input box (by its id)
 const fields = {
   name: "name",
   course: "course",
@@ -230,7 +343,6 @@ const fields = {
   cons: "cons",
 };
 
-// Read everything typed in the form into one object
 function readForm() {
   const data = {};
   for (const key in fields) {
@@ -239,37 +351,105 @@ function readForm() {
   return data;
 }
 
-// Put a university's info into the form (used when editing)
 function fillForm(uni) {
   for (const key in fields) {
     document.getElementById(fields[key]).value = uni[key] || "";
   }
 }
 
-function showFormMessage(text, type) {
-  formMessage.textContent = text;
-  formMessage.className = "form-message " + (type || "");
+// ----- Validation: show or clear a message under one field -----
+function setFieldError(inputId, message) {
+  const field = document.getElementById(inputId).closest(".field");
+  field.classList.toggle("has-error", Boolean(message));
+  document.getElementById(inputId + "-error").textContent = message || "";
 }
 
-// Switch the form into "edit" mode for one university
+function clearAllErrors() {
+  ["name", "course", "city", "country", "deadline"].forEach(function (id) {
+    setFieldError(id, "");
+  });
+}
+
+// Check the form. Returns true if everything is OK.
+function validateForm(data) {
+  clearAllErrors();
+  let firstProblem = null;
+
+  function problem(inputId, message) {
+    setFieldError(inputId, message);
+    if (!firstProblem) firstProblem = inputId;
+  }
+
+  // Required fields
+  if (data.name.length < 2) problem("name", "Enter the university's name.");
+  if (data.course.length < 2) problem("course", "Enter the course you're interested in.");
+  if (data.city.length < 2) problem("city", "Enter the city the university is in.");
+  if (data.country.length < 2) problem("country", "Enter the country.");
+
+  // The deadline is optional, but if there is one it must be a real date
+  const deadlineInput = document.getElementById("deadline");
+  if (deadlineInput.validity.badInput) {
+    problem("deadline", "That date isn't complete. Pick a day, month and year.");
+  } else if (data.deadline) {
+    const year = Number(data.deadline.slice(0, 4));
+    const oldUni = editingId ? findUniversity(editingId) : null;
+    const isUnchanged = oldUni && oldUni.deadline === data.deadline;
+
+    if (year < 2000 || year > 2100) {
+      problem("deadline", "Check the year. It should look like " + new Date().getFullYear() + ".");
+    } else if (daysUntil(data.deadline) < 0 && !isUnchanged) {
+      problem("deadline", "That date has already passed. Check the deadline, or leave it empty.");
+    }
+  }
+
+  // Move the cursor to the first field with a problem
+  if (firstProblem) {
+    document.getElementById(firstProblem).focus();
+    return false;
+  }
+  return true;
+}
+
+// Clear a field's error as soon as you start fixing it
+["name", "course", "city", "country", "deadline"].forEach(function (id) {
+  document.getElementById(id).addEventListener("input", function () {
+    setFieldError(id, "");
+  });
+});
+
+function showFormMessage(text, type) {
+  formMessage.textContent = text || "";
+  formMessage.className = "form-message" + (type ? " is-" + type : "");
+}
+
+// ----- Edit mode -----
 function startEditing(id) {
   const uni = findUniversity(id);
   editingId = id;
   fillForm(uni);
-  formTitle.textContent = "Edit " + uni.name;
-  submitButton.textContent = "Save changes";
-  cancelEditButton.hidden = false;
+  clearAllErrors();
   showFormMessage("");
-  form.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  formTitle.textContent = "Edit university";
+  formSubtitle.textContent = "Changing " + uni.name + ".";
+  submitLabel.textContent = "Save changes";
+  cancelEditButton.hidden = false;
+  formCard.classList.add("is-editing");
+
+  formCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("name").focus({ preventScroll: true });
 }
 
-// Switch the form back to "add" mode
 function stopEditing() {
   editingId = null;
   form.reset();
+  clearAllErrors();
+
   formTitle.textContent = "Add a university";
-  submitButton.textContent = "Add to map";
+  formSubtitle.textContent = "We'll find it on the map for you.";
+  submitLabel.textContent = "Add to map";
   cancelEditButton.hidden = true;
+  formCard.classList.remove("is-editing");
 }
 
 cancelEditButton.addEventListener("click", function () {
@@ -277,26 +457,30 @@ cancelEditButton.addEventListener("click", function () {
   showFormMessage("");
 });
 
-// What happens when you press "Add to map" or "Save changes".
+// ----- Submitting the form -----
 // "async" lets us wait for the location search to finish.
 form.addEventListener("submit", async function (event) {
   event.preventDefault(); // stop the page from reloading
 
   const data = readForm();
+  if (!validateForm(data)) return;
+
   const oldUni = editingId ? findUniversity(editingId) : null;
 
-  // Only look up the location again if it's new or has changed
+  // Only look up the location if it's new or has changed
   const placeChanged = !oldUni ||
     oldUni.name !== data.name || oldUni.city !== data.city || oldUni.country !== data.country;
 
   if (placeChanged) {
     submitButton.disabled = true;
-    showFormMessage("Finding " + data.city + " on the map...");
+    showFormMessage("Finding " + data.city + " on the map...", "working");
 
     try {
       const coords = await findCoordinates(data.name, data.city, data.country);
       if (!coords) {
-        showFormMessage("Couldn't find " + data.city + ", " + data.country + ". Check the spelling and try again.", "error");
+        setFieldError("city", "We couldn't find this place. Check the spelling of the city and country.");
+        showFormMessage("");
+        document.getElementById("city").focus();
         return;
       }
       data.lat = coords.lat;
@@ -312,285 +496,356 @@ form.addEventListener("submit", async function (event) {
     data.lng = oldUni.lng;
   }
 
+  let savedId;
   if (oldUni) {
-    // Editing: copy the new info onto the existing university
-    Object.assign(oldUni, data);
-    showFormMessage("Saved changes to " + data.name + ".", "success");
+    Object.assign(oldUni, data);       // copy the changes onto the existing one
+    savedId = oldUni.id;
+    showToast("Saved changes to " + data.name);
   } else {
-    // Adding: give it a unique id and add it to the list
-    data.id = Date.now();
+    data.id = Date.now();              // a unique id
     universities.push(data);
-    showFormMessage("Added " + data.name + " to the map.", "success");
+    savedId = data.id;
+    newestId = data.id;                // so its card animates in
+    showToast(data.name + " added to your map");
   }
 
-  const savedId = oldUni ? oldUni.id : data.id;
   saveUniversities();
   stopEditing();
-  selectUniversity(savedId, true); // show it in the details panel and fly to it
+  showFormMessage("");
+  selectUniversity(savedId, true);     // open its details and fly the map to it
 });
 
 
 // =========================================================
-// 6. THE LIST OF UNIVERSITIES
+// 8. THE UNIVERSITY LIST
 // =========================================================
 
 const uniList = document.getElementById("uni-list");
 const emptyList = document.getElementById("empty-list");
-const uniCount = document.getElementById("uni-count");
-
-function findUniversity(id) {
-  return universities.find(function (uni) {
-    return uni.id === id;
-  });
-}
-
-// Turn "2027-01-15" into a date. We split it ourselves so the
-// date isn't shifted by time zones.
-function parseDate(text) {
-  const parts = text.split("-");
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-}
-
-// How many days from today until the deadline (negative = already passed)
-function daysUntil(dateText) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.round((parseDate(dateText) - today) / millisecondsPerDay);
-}
-
-// Make the small colored deadline label, e.g. "12 days left"
-function makeDeadlineBadge(dateText) {
-  const badge = document.createElement("span");
-  badge.className = "deadline-badge";
-
-  if (!dateText) {
-    badge.textContent = "No deadline set";
-    badge.classList.add("passed");
-    return badge;
-  }
-
-  const days = daysUntil(dateText);
-  if (days < 0) {
-    badge.textContent = "Deadline passed";
-    badge.classList.add("passed");
-  } else if (days === 0) {
-    badge.textContent = "Due today";
-    badge.classList.add("soon");
-  } else {
-    badge.textContent = days + (days === 1 ? " day left" : " days left");
-    if (days <= 30) badge.classList.add("soon"); // orange when it's close
-  }
-  return badge;
-}
-
-// Sort so the soonest deadline is first, and ones without a date go last
-function sortByDeadline(list) {
-  return list.slice().sort(function (a, b) {
-    if (!a.deadline) return 1;
-    if (!b.deadline) return -1;
-    return parseDate(a.deadline) - parseDate(b.deadline);
-  });
-}
 
 function drawList() {
-  uniList.innerHTML = ""; // clear the old list
-  uniCount.textContent = universities.length;
+  uniList.innerHTML = "";
   emptyList.hidden = universities.length > 0;
 
   sortByDeadline(universities).forEach(function (uni) {
-    const item = document.createElement("li");
+    const status = getDeadlineStatus(uni.deadline);
 
-    // Each university is a button so you can click it (or use the keyboard)
-    const button = document.createElement("button");
-    button.className = "uni-item" + (uni.id === selectedId ? " selected" : "");
+    // The card. Its class sets the colored strip on the left.
+    const card = makeElement("li", "uni-card level-" + status.level);
+    card.dataset.id = uni.id;
+    if (uni.id === selectedId) card.classList.add("is-selected");
+    if (uni.id === newestId) card.classList.add("is-new");
 
-    const name = document.createElement("strong");
-    name.textContent = uni.name;
+    // The clickable main part: name, course, location, deadline
+    const main = makeElement("button", "uni-card-main");
+    main.title = "Show on map";
 
-    const sub = document.createElement("span");
-    sub.className = "uni-sub";
-    sub.textContent = uni.course + " · " + uni.city + ", " + uni.country;
+    const meta = makeElement("div", "uni-meta");
+    const course = makeElement("span");
+    course.append(makeIcon("book-open"), uni.course);
+    const place = makeElement("span");
+    place.append(makeIcon("map-pin"), uni.city + ", " + uni.country);
+    meta.append(course, place);
 
-    button.append(name, makeDeadlineBadge(uni.deadline), sub);
-    button.addEventListener("click", function () {
+    const deadline = makeElement("div", "uni-deadline");
+    deadline.append(makeDeadlineChip(uni.deadline));
+    if (uni.deadline) deadline.append(formatDate(uni.deadline));
+
+    main.append(makeElement("span", "uni-name", uni.name), meta, deadline);
+    main.addEventListener("click", function () {
       selectUniversity(uni.id, true);
     });
 
-    item.appendChild(button);
-    uniList.appendChild(item);
+    // Edit and delete buttons with icons
+    const actions = makeElement("div", "uni-actions");
+
+    const editButton = makeElement("button", "icon-button");
+    editButton.title = "Edit";
+    editButton.setAttribute("aria-label", "Edit " + uni.name);
+    editButton.append(makeIcon("pencil"));
+    editButton.addEventListener("click", function () {
+      startEditing(uni.id);
+    });
+
+    const deleteButton = makeElement("button", "icon-button danger");
+    deleteButton.title = "Delete";
+    deleteButton.setAttribute("aria-label", "Delete " + uni.name);
+    deleteButton.append(makeIcon("trash-2"));
+    deleteButton.addEventListener("click", function () {
+      deleteUniversity(uni.id);
+    });
+
+    actions.append(editButton, deleteButton);
+    card.append(main, actions);
+    uniList.appendChild(card);
   });
+
+  newestId = null; // only animate a new card once
+}
+
+// Delete a university, with a short fade-out animation first
+function deleteUniversity(id) {
+  const uni = findUniversity(id);
+
+  // confirm() shows a pop-up with OK and Cancel. It returns true for OK.
+  if (!confirm("Delete " + uni.name + "? This can't be undone.")) return;
+
+  const card = uniList.querySelector('[data-id="' + id + '"]');
+  if (card) card.classList.add("is-leaving");
+
+  // Wait for the animation (260ms) to finish, then really remove it
+  setTimeout(function () {
+    universities = universities.filter(function (u) {
+      return u.id !== id;
+    });
+    if (editingId === id) stopEditing();
+    if (selectedId === id) selectedId = null;
+
+    saveUniversities();
+    redrawEverything();
+    showToast(uni.name + " removed", "trash-2");
+  }, 260);
 }
 
 
 // =========================================================
-// 7. THE DETAILS PANEL
+// 9. THE DETAILS PANEL
 // =========================================================
 
 const detailsPanel = document.getElementById("details-panel");
-const emptyPanelHTML = detailsPanel.innerHTML; // remember the "Pick a university" message
+const panelBody = document.getElementById("panel-body");
 
-// Small helper: create an element with some text inside it
-function makeElement(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text) element.textContent = text;
-  return element;
+document.getElementById("close-panel").addEventListener("click", function () {
+  selectedId = null;
+  redrawEverything();
+});
+
+// Close the panel with the Escape key too
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape" && selectedId !== null) {
+    selectedId = null;
+    redrawEverything();
+  }
+});
+
+// A row with an icon, e.g. [calendar icon] 15 Jan 2027
+function makeFact(iconName, text) {
+  const row = makeElement("div", "fact");
+  row.append(makeIcon(iconName), makeElement("span", "", text));
+  return row;
 }
 
-// A titled section like "ENTRY REQUIREMENTS" followed by the text
-function makeDetailSection(title, text) {
-  const section = makeElement("div", "detail-section");
-  section.append(makeElement("h3", "", title), makeElement("p", "", text || "Not added yet"));
+// A section with a small heading and some text
+function makePanelSection(title, iconName, text) {
+  const section = makeElement("div", "panel-section");
+  const heading = makeElement("h4", "eyebrow");
+  heading.append(makeIcon(iconName), title);
+  const body = text ? makeElement("p", "", text) : makeElement("p", "empty-text", "Not added yet");
+  section.append(heading, body);
   return section;
 }
 
-// Turn "line one\nline two" into a bullet list
-function makeBulletList(text) {
-  const list = document.createElement("ul");
+// A colored box with a bullet list (used for pros and cons)
+function makeListBox(className, title, iconName, text) {
+  const box = makeElement("div", className);
+  const heading = makeElement("h4", "eyebrow");
+  heading.append(makeIcon(iconName), title);
+
   const lines = (text || "").split("\n").filter(function (line) {
     return line.trim() !== "";
   });
-  if (lines.length === 0) lines.push("None added");
-  lines.forEach(function (line) {
-    list.appendChild(makeElement("li", "", line));
-  });
-  return list;
+
+  box.append(heading);
+  if (lines.length === 0) {
+    box.append(makeElement("p", "empty-text", "None added"));
+  } else {
+    const list = document.createElement("ul");
+    lines.forEach(function (line) {
+      list.append(makeElement("li", "", line));
+    });
+    box.append(list);
+  }
+  return box;
 }
 
 function drawDetails() {
   const uni = findUniversity(selectedId);
+  detailsPanel.classList.toggle("is-open", Boolean(uni));
+  if (!uni) return;
 
-  if (!uni) {
-    detailsPanel.innerHTML = emptyPanelHTML;
-    return;
-  }
+  panelBody.innerHTML = "";
 
-  detailsPanel.innerHTML = "";
+  // Deadline chip at the top
+  const statusRow = makeElement("div", "panel-status");
+  statusRow.append(makeDeadlineChip(uni.deadline));
 
-  // Top part: location, name, course, deadline
-  detailsPanel.append(
-    makeElement("p", "details-location", uni.city + ", " + uni.country),
-    makeElement("h2", "", uni.name),
-    makeElement("p", "details-course", uni.course),
-    makeDeadlineBadge(uni.deadline)
-  );
-
-  // Show the deadline date in a friendly format, e.g. "15 Jan 2027"
-  const deadlineText = uni.deadline
-    ? parseDate(uni.deadline).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
-    : "";
-
-  detailsPanel.append(
-    makeDetailSection("Application deadline", deadlineText),
-    makeDetailSection("Entry requirements", uni.requirements),
-    makeDetailSection("Application info", uni.applicationInfo)
+  // Key facts
+  const facts = makeElement("div", "panel-facts");
+  facts.append(
+    makeFact("map-pin", uni.city + ", " + uni.country),
+    makeFact("calendar", uni.deadline ? "Deadline " + formatDate(uni.deadline) : "No deadline set")
   );
 
   // Pros and cons side by side
   const prosCons = makeElement("div", "pros-cons");
-  const pros = makeElement("div", "detail-section pros");
-  pros.append(makeElement("h3", "", "Pros"), makeBulletList(uni.pros));
-  const cons = makeElement("div", "detail-section cons");
-  cons.append(makeElement("h3", "", "Cons"), makeBulletList(uni.cons));
-  prosCons.append(pros, cons);
-  detailsPanel.appendChild(prosCons);
+  prosCons.append(
+    makeListBox("pros-box", "Pros", "thumbs-up", uni.pros),
+    makeListBox("cons-box", "Cons", "thumbs-down", uni.cons)
+  );
 
-  // Edit and Delete buttons
-  const actions = makeElement("div", "details-actions");
-  const editButton = makeElement("button", "button", "Edit");
-  const deleteButton = makeElement("button", "button danger", "Delete");
-
+  // Edit and delete buttons
+  const actions = makeElement("div", "panel-actions");
+  const editButton = makeElement("button", "button");
+  editButton.append(makeIcon("pencil"), "Edit");
   editButton.addEventListener("click", function () {
     startEditing(uni.id);
   });
-
+  const deleteButton = makeElement("button", "button button-danger");
+  deleteButton.append(makeIcon("trash-2"), "Delete");
   deleteButton.addEventListener("click", function () {
-    // confirm() shows a pop-up with OK and Cancel. It returns true for OK.
-    if (!confirm("Delete " + uni.name + "? This can't be undone.")) return;
-
-    universities = universities.filter(function (u) {
-      return u.id !== uni.id;
-    });
-    if (editingId === uni.id) stopEditing();
-    selectedId = null;
-    saveUniversities();
-    redrawEverything();
+    deleteUniversity(uni.id);
   });
-
   actions.append(editButton, deleteButton);
-  detailsPanel.appendChild(actions);
+
+  panelBody.append(
+    statusRow,
+    makeElement("h2", "panel-title", uni.name),
+    makeElement("p", "panel-course", uni.course),
+    facts,
+    makePanelSection("Entry requirements", "award", uni.requirements),
+    makePanelSection("How to apply", "file-text", uni.applicationInfo),
+    prosCons,
+    actions
+  );
+  detailsPanel.scrollTop = 0;
 }
 
 // Select a university: highlight it everywhere and show its details.
-// If flyToIt is true, the map smoothly moves to its pin.
+// If flyToIt is true, the map glides over to its pin.
 function selectUniversity(id, flyToIt) {
   selectedId = id;
   redrawEverything();
 
   const uni = findUniversity(id);
-  if (map && uni && flyToIt) {
-    map.flyTo([uni.lat, uni.lng], 6, { duration: 1 });
+  if (!uni) return;
+
+  if (map && flyToIt) {
+    map.flyTo([uni.lat, uni.lng], 6, { duration: 0.9 });
+  }
+
+  // On small screens the panel is under the map, so scroll to it
+  if (window.innerWidth <= 960 && flyToIt) {
+    document.querySelector(".map-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
-// Update the pins, the list and the details panel all at once
+
+// =========================================================
+// 10. SUMMARY STATS
+// =========================================================
+
+function drawStats() {
+  document.getElementById("stat-total").textContent = universities.length;
+
+  // Count different countries (ignoring capital letters)
+  const countries = new Set(universities.map(function (uni) {
+    return uni.country.toLowerCase();
+  }));
+  document.getElementById("stat-countries").textContent = countries.size;
+
+  // The soonest deadline that hasn't passed yet
+  const upcoming = sortByDeadline(universities).find(function (uni) {
+    return uni.deadline && daysUntil(uni.deadline) >= 0;
+  });
+  document.getElementById("stat-next").textContent = upcoming
+    ? upcoming.name + " · " + getDeadlineStatus(upcoming.deadline).label
+    : "None yet";
+}
+
+// Update the pins, list, panel and stats all at once
 function redrawEverything() {
   drawPins();
   drawList();
   drawDetails();
+  drawStats();
+  refreshIcons();
 }
 
 
 // =========================================================
-// 8. THE PROFILE TAB
+// 11. TOASTS (small messages that pop up in the corner)
+// =========================================================
+
+function showToast(message, iconName) {
+  const toast = makeElement("div", "toast");
+  toast.append(makeIcon(iconName || "circle-check"), makeElement("span", "", message));
+  document.getElementById("toast-area").append(toast);
+  refreshIcons();
+
+  // After 3 seconds, fade it out and then remove it
+  setTimeout(function () {
+    toast.classList.add("is-leaving");
+    setTimeout(function () {
+      toast.remove();
+    }, 300);
+  }, 3000);
+}
+
+
+// =========================================================
+// 12. THE PROFILE TAB
 // Each text box saves itself every time you type.
 // =========================================================
 
-const profileFields = document.querySelectorAll(".profile-field");
-
-// Update the small line under a text box, e.g. "1,234 / 4,000 characters · Saved"
+// Update the line under a text box, e.g. "1,234 / 4,000 characters · Saved"
 function updateProfileStatus(textarea, justSaved) {
-  const status = document.querySelector('.profile-status[data-for="' + textarea.id + '"]');
+  const status = document.getElementById(textarea.id + "-status");
   const length = textarea.value.length;
-  const limit = status.dataset.limit ? Number(status.dataset.limit) : null;
+  const limit = textarea.dataset.limit ? Number(textarea.dataset.limit) : null;
 
   let text = length.toLocaleString() + " characters";
-  if (limit) {
-    text = length.toLocaleString() + " / " + limit.toLocaleString() + " characters";
-  }
-  if (justSaved) {
-    text += " · Saved";
-  }
+  if (limit) text = length.toLocaleString() + " / " + limit.toLocaleString() + " characters";
+  if (justSaved) text += " · Saved";
 
   status.textContent = text;
-  status.classList.toggle("over-limit", limit !== null && length > limit);
+  status.classList.toggle("is-over", limit !== null && length > limit);
+
+  // The personal statement's progress bar
+  if (limit) {
+    const meter = document.getElementById("statement-meter");
+    const percent = Math.min(100, (length / limit) * 100);
+    meter.style.width = percent + "%";
+    meter.classList.toggle("is-near", length > limit * 0.9 && length <= limit);
+    meter.classList.toggle("is-over", length > limit);
+  }
 }
 
-profileFields.forEach(function (textarea) {
+document.querySelectorAll(".profile-field").forEach(function (textarea) {
   const storageKey = "future-planner-profile-" + textarea.dataset.key;
 
   // Load what was saved before
   try {
     textarea.value = localStorage.getItem(storageKey) || "";
   } catch (error) {
-    // storage blocked; just start empty
+    // storage blocked: start empty
   }
   updateProfileStatus(textarea, false);
 
-  // Save every time the text changes
+  // Save on every change
   textarea.addEventListener("input", function () {
     try {
       localStorage.setItem(storageKey, textarea.value);
     } catch (error) {
-      // storage blocked; nothing we can do
+      // storage blocked: nothing we can do
     }
     updateProfileStatus(textarea, true);
   });
 });
 
-// Copy buttons: copy the text box's contents to the clipboard
+// "Copy to clipboard" buttons
 document.querySelectorAll(".copy-button").forEach(function (button) {
+  const label = button.querySelector("span");
+
   button.addEventListener("click", async function () {
     const textarea = document.getElementById(button.dataset.target);
 
@@ -602,19 +857,21 @@ document.querySelectorAll(".copy-button").forEach(function (button) {
       document.execCommand("copy");
     }
 
-    // Show "Copied!" for 1.5 seconds, then go back to "Copy"
-    button.textContent = "Copied!";
+    // Turn green and say "Copied" for 1.5 seconds
+    button.classList.add("is-copied");
+    label.textContent = "Copied";
     setTimeout(function () {
-      button.textContent = "Copy";
+      button.classList.remove("is-copied");
+      label.textContent = "Copy to clipboard";
     }, 1500);
   });
 });
 
 
 // =========================================================
-// 9. START THE APP
-// Draw everything that was saved last time.
+// 13. START THE APP
 // =========================================================
 
+document.getElementById("year").textContent = new Date().getFullYear();
 redrawEverything();
 zoomToAllPins();
