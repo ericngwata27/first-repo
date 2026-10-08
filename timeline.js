@@ -447,13 +447,27 @@ function analyseAdmissions(uni, entry) {
       binding: /early decision/i.test(round.label), source: "added by you", manual: true });
   });
 
-  // The official deadline from auto-fill is the final deadline,
-  // unless one of the rounds already has that date
+  // Auto-fill's deadline is the NEXT upcoming deadline. It's only the
+  // final deadline if no other round comes after it.
   if (uni.deadline && !rounds.some(function (r) { return r.date === uni.deadline; })) {
-    rounds.push({ key: "final", label: "Final deadline", short: "Final", date: uni.deadline,
-      binding: false, source: uni.verified ? "official website" : "auto-fill" });
+    const isLast = !rounds.some(function (r) { return r.date > uni.deadline; });
+    rounds.push({
+      key: isLast ? "final" : "next",
+      label: isLast ? "Final deadline" : "Next deadline",
+      short: isLast ? "Final" : "Next",
+      date: uni.deadline,
+      binding: false,
+      source: uni.verified ? "official website" : "auto-fill",
+    });
   }
   rounds.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+
+  // Merge exact duplicates (same name and same date)
+  rounds = rounds.filter(function (round, index) {
+    return !rounds.slice(0, index).some(function (other) {
+      return other.date === round.date && other.label.toLowerCase() === round.label.toLowerCase();
+    });
+  });
 
   // Clues from the text (always read: they add detail even with a structured type)
   const rollingText = firstMatch(text, ROLLING_SIGNALS);
@@ -503,16 +517,15 @@ function earliestReadyDate(entry) {
   return addDays(todayText(), days);
 }
 
-// The date halfway between two dates
-function midpoint(startText, endText) {
-  return addDays(startText, Math.floor(daysBetween(startText, endText) / 2));
-}
-
 // Pick a round, and the date to submit for it.
 // Order of rules:
-//   1. the university's recommended window (unless you picked a round yourself)
-//   2. the admissions type: rolling / rounds / equal consideration / single deadline
-//   3. fallback text clues, when there's no structured type
+//   1. rolling admissions (or "apply early"): as soon as you're ready.
+//      Places go to whoever applies first, so waiting never helps. If the
+//      university gives a window, it's used as a check, not a target.
+//   2. the university's recommended window (unless you picked a round
+//      yourself): its start, or as soon as you're ready if that's later
+//   3. the admissions type: rounds / equal consideration / single deadline
+//   4. fallback text clues, when there's no structured type
 function recommendPlan(uni, entry, analysis) {
   const today = todayText();
   const ready = earliestReadyDate(entry);
@@ -539,16 +552,17 @@ function recommendPlan(uni, entry, analysis) {
 
   const window = analysis.window && analysis.window.end >= today ? analysis.window : null;
 
-  if (window && !chosen) {
-    // 1. The university says when to apply: aim for the middle of that window
-    mode = "window";
-    source = SOURCES.window;
-    plannedDate = laterDate(ready, midpoint(window.start, window.end));
-  } else if (analysis.type === "rolling" || analysis.type === "early") {
-    // 2a. Rolling, or "apply early": as soon as you can be ready
+  if ((analysis.type === "rolling" || analysis.type === "early") && !chosen) {
+    // 1. Rolling, or "apply early": as soon as you can be ready
     mode = analysis.type;
     source = typeSource;
     plannedDate = ready;
+  } else if (window && !chosen) {
+    // 2. The university says when to apply: the start of that window,
+    //    or as soon as you're ready if that's later
+    mode = "window";
+    source = SOURCES.window;
+    plannedDate = laterDate(ready, laterDate(window.start, today));
   } else if (target && analysis.type === "rounds") {
     // 2b. Several rounds: a week before the target round closes
     mode = "rounds";
@@ -615,7 +629,9 @@ function scheduleMilestones(entry, submitDate) {
 
 // "Round 1 deadline" / "final deadline", for use in sentences
 function deadlineName(round) {
-  return round.key === "final" ? "final deadline" : round.label + " deadline";
+  if (round.key === "final") return "final deadline";
+  if (round.key === "next") return "next deadline";
+  return round.label + " deadline";
 }
 
 // The strategy notes shown on the card, most important first.
@@ -642,14 +658,14 @@ function strategyNotes(uni, entry, analysis, plan) {
       text: "Finishing every step takes until about " + shortDate(plan.ready) + ", after the " + deadlineName(target) +
         ". Start the slowest steps now, or aim for a later round if there is one." });
   }
-  if (plan.mode === "window" && !plan.canMakeWindow) {
+  if (plan.window && !plan.canMakeWindow) {
     notes.push({ type: "is-late", icon: "circle-alert",
       text: "Finishing every step takes until about " + shortDate(plan.ready) +
         ", after the recommended window ends. Start the slowest steps now." });
   }
 
   // Why the plan is what it is
-  if (plan.mode === "window") {
+  if (plan.window) {
     notes.push({ type: "is-good", icon: "calendar",
       text: "University recommends applying during: " + plan.window.text });
   }
@@ -669,6 +685,15 @@ function strategyNotes(uni, entry, analysis, plan) {
     notes.push({ type: "is-good", icon: "target",
       text: "Earlier rounds usually have more places left. " + rec.label + " (" + shortDate(rec.date) +
         ") is the earliest round you can be ready for." });
+    // An earlier round that's just out of reach: say so, it may be worth rushing
+    const tooSoon = analysis.rounds.find(function (r) {
+      return r.date >= todayText() && r.date < plan.ready && r.date < rec.date && !r.binding;
+    });
+    if (tooSoon) {
+      notes.push({ type: "is-tight", icon: "clock",
+        text: tooSoon.label + " (" + shortDate(tooSoon.date) + ") is too soon: finishing every step takes until about " +
+          shortDate(plan.ready) + ". If you can get your steps done faster, it's worth aiming for it." });
+    }
     if (target && target.key !== rec.key && target.date > rec.date) {
       notes.push({ type: "is-tight", icon: "info",
         text: "You're aiming for " + target.label + ". " + rec.label + " is earlier and you could be ready for it." });
@@ -693,7 +718,7 @@ function strategyNotes(uni, entry, analysis, plan) {
   if (plan.plannedDate) {
     let forWhat = "";
     if (plan.mode === "window") forWhat = " (in the university's recommended window)";
-    else if (target) forWhat = target.key === "final" ? " (before the final deadline)" : " (for " + target.label + ")";
+    else if (target) forWhat = " (before the " + deadlineName(target) + ")";
     notes.push({ type: "is-plan", icon: "sparkles",
       text: "Recommended submission date: " + formatDate(plan.plannedDate) + forWhat + ".",
       source: plan.source });
@@ -835,10 +860,10 @@ function buildCard(uni) {
     const autoOption = document.createElement("option");
     autoOption.value = "auto";
     // Say what "Recommended" means for this university
-    if (plan.mode === "window") {
-      autoOption.textContent = "Recommended: university's window (" + shortDate(plan.window.start) + " to " + shortDate(plan.window.end) + ")";
-    } else if (plan.mode === "rolling" || plan.mode === "early") {
+    if (plan.mode === "rolling" || plan.mode === "early") {
       autoOption.textContent = "Recommended: as soon as you're ready";
+    } else if (plan.mode === "window") {
+      autoOption.textContent = "Recommended: university's window (" + shortDate(plan.window.start) + " to " + shortDate(plan.window.end) + ")";
     } else {
       autoOption.textContent = plan.recommended
         ? "Recommended: " + plan.recommended.label + " (" + shortDate(plan.recommended.date) + ")"
@@ -1033,14 +1058,25 @@ function buildCard(uni) {
   return card;
 }
 
-// "Round 1" -> "R1", "Early Decision" -> "ED", "Main deadline" -> "MD"
+// "Round 1" -> "R1", "Early Decision" -> "ED", "Main deadline" -> "MD".
+// A campus in front of the round is kept as initials:
+// "Paris/Madrid Round 1" -> "PM R1", "Turin Round 2" -> "T R2".
 function shortRoundName(label) {
-  const type = ROUND_TYPES.find(function (t) {
-    t.pattern.lastIndex = 0;
-    return t.pattern.test(label);
+  let found = null;
+  ROUND_TYPES.forEach(function (type) {
+    if (found) return;
+    type.pattern.lastIndex = 0;
+    const match = type.pattern.exec(label);
+    if (match) found = { type: type, index: match.index };
   });
-  if (type) return type.short;
-  return label.split(/\s+/).map(function (word) { return word[0] || ""; }).join("").slice(0, 3).toUpperCase() || "R";
+  const initials = function (text) {
+    return text.split(/[\s\/&,-]+/).filter(Boolean).map(function (word) { return word[0]; }).join("").toUpperCase();
+  };
+  if (found) {
+    const campus = initials(label.slice(0, found.index)).slice(0, 2);
+    return campus ? campus + " " + found.type.short : found.type.short;
+  }
+  return initials(label).slice(0, 3) || "R";
 }
 
 
@@ -1061,7 +1097,7 @@ function buildTimelineVisual(entry, analysis, plan) {
     const isTarget = plan.target && plan.target.key === round.key;
     points.push({
       key: round.key,
-      kind: isTarget ? "target" : (round.key === "final" ? "final" : "round"),
+      kind: isTarget ? "target" : (round.key === "final" ? "final" : "round"),   // "next" stays grey
       label: round.label,
       short: round.short,
       date: round.date,
@@ -1119,14 +1155,45 @@ function buildTimelineVisual(entry, analysis, plan) {
     track.append(segment);
   }
 
-  // A dot for each point. Rounds get a short label above (R1, R2, ED...)
+  // A dot for each date. Rounds on the same date share one dot and one
+  // label ("R2 / T R2"). Rounds get a short label above (R1, R2, ED...),
+  // and a label that would sit on top of the previous one moves below the line.
+  const KIND_ORDER = ["target", "final", "planned", "today", "round"];
+  const byDate = [];
   points.forEach(function (point) {
-    const marker = makeElement("span", "tl-marker tl-marker-" + point.kind);
-    marker.style.left = position(point.date) + "%";
-    marker.title = point.label + ": " + formatDate(point.date);
-    if (point.short) marker.append(makeElement("span", "tl-marker-label", point.short));
+    const group = byDate.find(function (g) { return g.date === point.date; });
+    if (group) group.points.push(point);
+    else byDate.push({ date: point.date, points: [point] });
+  });
+
+  let lastLabelPosition = -100;
+  let lastLabelBelow = true;
+  let anyBelow = false;
+  byDate.forEach(function (group) {
+    // The most important kind decides the dot's color
+    group.points.sort(function (a, b) { return KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind); });
+    const main = group.points[0];
+    const marker = makeElement("span", "tl-marker tl-marker-" + main.kind);
+    const left = position(group.date);
+    marker.style.left = left + "%";
+    marker.title = group.points.map(function (p) { return p.label; }).join(", ") + ": " + formatDate(group.date);
+
+    const shorts = group.points.filter(function (p) { return p.short; }).map(function (p) { return p.short; });
+    if (shorts.length > 0) {
+      const label = makeElement("span", "tl-marker-label", shorts.join(" / "));
+      // Too close to the previous label (about 9% of the line)? Flip sides.
+      const below = left - lastLabelPosition < 9 ? !lastLabelBelow : false;
+      if (below) {
+        label.classList.add("is-below");
+        anyBelow = true;
+      }
+      lastLabelPosition = left;
+      lastLabelBelow = below;
+      marker.append(label);
+    }
     track.append(marker);
   });
+  if (anyBelow) track.classList.add("has-labels-below");
 
   // The key under the line, e.g. "● Round 1 15 Nov · in 38 days"
   const legend = makeElement("div", "tl-legend");
@@ -1196,7 +1263,7 @@ function drawSummary() {
     const plan = recommendPlan(uni, entry, analyseAdmissions(uni, entry));
     if (plan.target && daysUntil(plan.target.date) >= 0) {
       upcoming.push({ date: plan.target.date,
-        text: plan.target.key === "final" ? "Deadline" : plan.target.label + " deadline", uni: uni });
+        text: plan.target.key === "final" || plan.target.key === "next" ? "Deadline" : plan.target.label + " deadline", uni: uni });
     }
   });
 
@@ -1272,7 +1339,7 @@ function calendarEvents(uni) {
   analysis.rounds.forEach(function (round) {
     if (round.date < todayText()) return;
     const isTarget = plan.target && plan.target.key === round.key;
-    const isFinal = round.key === "final";
+    const isFinal = round.key === "final" || round.key === "next";   // auto-fill's deadline
     events.push({
       key: isFinal ? "deadline" : "round-" + round.key,  // "deadline" keeps the same id as before
       date: round.date,
