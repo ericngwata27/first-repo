@@ -39,6 +39,7 @@ const STORAGE_KEYS = {
   timeline: "future-planner-timeline",
   searchCache: "future-planner-search-cache",
   apiKey: "future-planner-claude-key",
+  academicProfile: "future-planner-academic-profile",   // start date, grade, school system, country
   profilePrefix: "future-planner-profile-",  // + "personal", "statement", ...
 };
 
@@ -572,8 +573,13 @@ const SEARCH_INSTRUCTIONS = [
   "- Admissions Rounds: list every round in date order as 'Name - date', separated by semicolons " +
     "(for example: Round 1 - 15 November 2026; Round 2 - 15 January 2027). Include the year when the page gives it. " +
     "Never merge rounds into one. Write \"Not available\" if there are no named rounds. " +
-    "If rounds differ by campus, list only the rounds for the campus given in City. If you can't tell which campus, " +
-    "start each round's name with its campus (for example: Paris Round 1 - 18 November 2026). Never mix campuses without naming them.",
+    "If rounds differ by campus, include ALL campuses and start each round with its campus and a colon " +
+    "(for example: Paris: Round 1 - 18 November 2026; Turin: Round 1 - 27 October 2026). Never leave out a campus.",
+  "- Intake: give deadlines and rounds only for the admissions cycle for the applicant's intended start date, never for an earlier or later intake.",
+  "- School system: give Entry Requirements for the applicant's school system when the page lists them (for example the Abitur grade or IB points).",
+  "- Country of residence: use it only for rules that depend on residence (such as fees or a separate application route). " +
+    "Never use it to choose or leave out a campus.",
+  "- Important Notes: mention any signs of how competitive admission is (selectivity, interviews, admission tests, limited places).",
   "- Recommended Window: copy the university's own advice about when to apply, in its own words " +
     "(for example: Apply October-December because spaces fill progressively). Write \"Not available\" if it gives none.",
 ].join("\n");
@@ -758,31 +764,101 @@ function roundLabel(item) {
 // "Round 1 - 15 November 2026; Round 2 - 15 January 2027"
 //   -> [{ label: "Round 1", date: "2026-11-15" }, { label: "Round 2", date: "2027-01-15" }]
 // Rounds without a readable date are left out.
+// Words that start a round's name ("Round 1", "Early Decision", ...).
+// Anything written before them can be the campus ("Paris Round 1").
+// "deadline" isn't one of them: in "Application deadline" or
+// "Early bird deadline" the first word is not a campus.
+const ROUND_WORDS = /\b(?:round|stage|phase|early decision|early action|restrictive early action|regular decision)\b/i;
+
+// Words that describe applicants or deadlines, never a campus
+const NOT_CAMPUS = /\b(?:applicants?|students?|international|domestic|home|overseas|eu|non-eu|deadline|application|early bird|priority|regular|main|final|general|standard)\b/i;
+
+// "Paris: Round 1 - 18 November" -> { campus: "Paris", rest: "Round 1 - 18 November" }
+// "Paris/Madrid Round 1 - 18 Nov" -> { campus: "Paris/Madrid", rest: "Round 1 - 18 Nov" }
+// "Round 1 - 18 November"        -> { campus: "", rest: "Round 1 - 18 November" }
+// "Application deadline - 30 Jun" -> { campus: "", rest: "Application deadline - 30 Jun" }
+function splitCampus(item) {
+  const text = item.trim();
+  const tidy = function (campus) {
+    return campus.replace(/\s*campus$/i, "").trim();   // "Paris campus" -> "Paris"
+  };
+  const isCampus = function (before) {
+    return before && !/\d/.test(before) && !NOT_CAMPUS.test(before) && !ROUND_WORDS.test(before);
+  };
+
+  const colon = text.indexOf(":");
+  if (colon > 0) {
+    const before = tidy(text.slice(0, colon));
+    if (isCampus(before)) return { campus: before, rest: text.slice(colon + 1).trim() };
+  }
+  const roundWord = text.search(ROUND_WORDS);
+  if (roundWord > 0) {
+    const before = tidy(text.slice(0, roundWord).replace(/[-:,\s]+$/, ""));
+    if (isCampus(before)) return { campus: before, rest: text.slice(roundWord) };
+  }
+  return { campus: "", rest: text };
+}
+
+// "Paris: Round 1 - 15 November 2026; Turin: Round 1 - 27 October 2026"
+//   -> [{ campus: "Paris", label: "Round 1", date: "2026-11-15" },
+//       { campus: "Turin", label: "Round 1", date: "2026-10-27" }]
+// Rounds without a readable date are left out. Every campus is kept.
 function parseRoundsList(text) {
   const rounds = [];
   cleanAnswer(text).split(/;|\n|\|/).forEach(function (item) {
     const date = parseLooseDate(item);
     if (!date) return;
 
-    // The name is everything except the date, e.g.
-    // "Paris/Madrid: Round 1 - 18 November" -> "Paris/Madrid Round 1"
-    const label = roundLabel(item);
+    const parts = splitCampus(item);
+    const campus = parts.campus.slice(0, 40);
+    const label = roundLabel(parts.rest);   // everything except the date
 
-    const duplicate = rounds.some(function (r) { return r.label.toLowerCase() === label.toLowerCase() && r.date === date; });
-    if (!duplicate) rounds.push({ label: label, date: date });
+    const duplicate = rounds.some(function (r) {
+      return r.campus.toLowerCase() === campus.toLowerCase() && r.label.toLowerCase() === label.toLowerCase() && r.date === date;
+    });
+    if (!duplicate) rounds.push({ campus: campus, label: label, date: date });
   });
-  return rounds.slice(0, 8);
+  return rounds.slice(0, 24);
+}
+
+// ----- Your academic profile (set on the Profile tab) -----
+// { intendedStartDate: "2027-09", currentGradeLevel: "Year 13 (Grade 12)",
+//   schoolSystem: "Abitur", countryOfResidence: "Germany" }
+
+function getAcademicProfile() {
+  const saved = DataStore.read(STORAGE_KEYS.academicProfile, {});
+  const text = function (value) { return typeof value === "string" ? value.trim().slice(0, 80) : ""; };
+  return {
+    intendedStartDate: /^\d{4}-\d{2}$/.test(saved.intendedStartDate || "") ? saved.intendedStartDate : "",
+    currentGradeLevel: text(saved.currentGradeLevel),
+    schoolSystem: text(saved.schoolSystem),
+    countryOfResidence: text(saved.countryOfResidence),
+  };
+}
+
+// "2027-09" -> "September 2027"
+function intakeLabel(intake) {
+  if (!intake) return "";
+  const parts = intake.split("-");
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
+    .toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 }
 
 async function searchOfficialPages(apiKey, uniName, course, found) {
   const domain = found && found.website ? getDomain(found.website) : "";
   const today = new Date().toISOString().slice(0, 10);
+  const profile = getAcademicProfile();
 
   const question = [
     "University: " + uniName,
     "Course: " + course,
     domain ? "Official website: " + found.website : "",
     "Today's date: " + today,
+    // Your academic profile, so the cycle, grades and rules match you
+    profile.intendedStartDate ? "Intended start date: " + intakeLabel(profile.intendedStartDate) : "",
+    profile.currentGradeLevel ? "Current grade level: " + profile.currentGradeLevel : "",
+    profile.schoolSystem ? "School system: " + profile.schoolSystem : "",
+    profile.countryOfResidence ? "Country of residence: " + profile.countryOfResidence : "",
   ].filter(Boolean).join("\n");
 
   // The web search tool. max_uses: 3 matches the "stop after 3 pages" rule,
@@ -870,7 +946,7 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
   // Only a month ("June 2027", "rolling until June")? Use the last day of that month.
   if (deadlineText && !deadline) {
     deadline = endOfMonthDate(deadlineText);
-    if (deadline) notes = ("Deadline estimated as " + formatDate(deadline) + " from \"" + deadlineText + "\". " + notes).trim();
+    if (deadline) notes = ("Estimated last day of month (rolling until then): " + formatDate(deadline) + ", from \"" + deadlineText + "\". " + notes).trim();
   }
 
   // Still nothing? Use the next round that hasn't passed yet.
@@ -1071,11 +1147,15 @@ function showLookupResult(result, errorText, cachedAt) {
 
 // Bumped when the saved search format changes, so older saved searches
 // (without the admissions fields) are searched again once
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;   // 3: rounds have campuses, searches use your academic profile
 const CACHE_DAYS = 7;
 
+// Your academic profile is part of the key: a search for a different
+// start date or school system is a different search
 function searchCacheKey(name, course) {
-  return (name + "|" + course).toLowerCase().replace(/\s+/g, " ");
+  const p = getAcademicProfile();
+  return [name, course, p.intendedStartDate, p.currentGradeLevel, p.schoolSystem, p.countryOfResidence]
+    .join("|").toLowerCase().replace(/\s+/g, " ");
 }
 
 function loadSearchCache() {
@@ -1202,6 +1282,7 @@ async function lookUpUniversity(options) {
     admissionsType: details ? details.admissionsType : "",
     admissionsRounds: details ? details.admissionsRounds : [],
     recommendedWindow: details ? details.recommendedWindow : "",
+    intake: details ? getAcademicProfile().intendedStartDate : "",   // the start date these dates are for
   };
 
   // Fill in the form
@@ -1376,6 +1457,7 @@ form.addEventListener("submit", async function (event) {
       data.admissionsType = lookup.admissionsType;
       data.admissionsRounds = lookup.admissionsRounds;
       data.recommendedWindow = lookup.recommendedWindow;
+      data.intake = lookup.intake;
     }
   }
 
@@ -1433,6 +1515,48 @@ form.addEventListener("submit", async function (event) {
   selectUniversity(savedId, true);     // open its details and fly the map to it
 });
 
+
+// ----- Your academic profile: the boxes on the Profile tab -----
+const ACADEMIC_FIELDS = {
+  intendedStartDate: "profile-start",
+  currentGradeLevel: "profile-grade",
+  schoolSystem: "profile-system",
+  countryOfResidence: "profile-country",
+};
+
+function showAcademicProfile() {
+  const profile = getAcademicProfile();
+  for (const key in ACADEMIC_FIELDS) {
+    document.getElementById(ACADEMIC_FIELDS[key]).value = profile[key];
+  }
+
+  const intake = intakeLabel(profile.intendedStartDate);
+  const status = document.getElementById("academic-status");
+  const searchFor = document.getElementById("search-for");
+  status.textContent = intake
+    ? "Searches look for the admissions cycle for " + intake + " entry" +
+      (profile.schoolSystem ? ", with entry requirements for " + profile.schoolSystem : "") + "."
+    : "Set your intended start date so searches find deadlines for the right year.";
+  searchFor.textContent = intake
+    ? "Searching for " + intake + " entry. Change this on the Profile tab."
+    : "Set your intended start date on the Profile tab, so searches find the right year.";
+  status.classList.toggle("is-warning", !intake);
+  searchFor.classList.toggle("is-warning", !intake);
+}
+
+function saveAcademicProfile() {
+  const profile = {};
+  for (const key in ACADEMIC_FIELDS) {
+    profile[key] = document.getElementById(ACADEMIC_FIELDS[key]).value.trim();
+  }
+  DataStore.write(STORAGE_KEYS.academicProfile, profile);
+  showAcademicProfile();
+  document.dispatchEvent(new CustomEvent("universities-changed"));   // the Timeline re-checks start dates
+}
+
+for (const key in ACADEMIC_FIELDS) {
+  document.getElementById(ACADEMIC_FIELDS[key]).addEventListener("change", saveAcademicProfile);
+}
 
 // ----- Auto-fill settings: saving your API key -----
 const apiKeyInput = document.getElementById("api-key");
@@ -1627,9 +1751,10 @@ function makeAdmissionsSection(uni) {
   const parts = [];
   if (ADMISSIONS_TYPE_LABELS[uni.admissionsType]) parts.push(ADMISSIONS_TYPE_LABELS[uni.admissionsType]);
   (uni.admissionsRounds || []).forEach(function (round) {
-    parts.push(round.label + ": " + formatDate(round.date));
+    parts.push((round.campus ? round.campus + " " : "") + round.label + ": " + formatDate(round.date));
   });
   if (uni.recommendedWindow) parts.push("Recommended: " + uni.recommendedWindow);
+  if (uni.intake) parts.push("For " + intakeLabel(uni.intake) + " entry");
 
   const section = makeElement("div");
   if (parts.length > 0) {
@@ -1915,5 +2040,6 @@ document.querySelectorAll(".copy-button").forEach(function (button) {
 
 document.getElementById("year").textContent = new Date().getFullYear();
 updateAiState(); // show whether AI search is on
+showAcademicProfile(); // fill in your academic profile
 redrawEverything();
 zoomToAllPins();
