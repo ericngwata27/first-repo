@@ -1,0 +1,178 @@
+/* ===== Colors we reuse throughout the page ===== */
+:root {
+  --main-color: #3b5bdb;      /* blue for buttons and headings */
+  --university-color: #7048e8; /* purple tag for universities */
+  --job-color: #2b8a3e;        /* green tag for jobs */
+  --background: #f4f6fb;       /* light gray page background */
+  --card-background: #ffffff;  /* white boxes */
+  --text-color: #212529;       /* dark gray text */
+}
+
+/* ===== Whole page ===== */
+* {
+  box-sizing: border-box; /* makes widths easier to work with */
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--background);
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+/* ===== Top banner ===== */
+header {
+  background-color: var(--main-color);
+  color: white;
+  text-align: center;
+  padding: 32px 16px;
+}
+
+header h1 {
+  margin: 0;
+}
+
+/* ===== Main content area ===== */
+main {
+  max-width: 800px;  /* keeps the content from getting too wide */
+  margin: 0 auto;    /* centers it on the page */
+  padding: 16px;
+}
+
+/* White boxes that hold each section */
+.card {
+  background-color: var(--card-background);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+h2 {
+  margin-top: 0;
+  color: var(--main-color);
+}
+
+/* ===== Form ===== */
+form {
+  display: flex;
+  flex-direction: column; /* stack the fields on top of each other */
+}
+
+label {
+  font-weight: bold;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+input,
+select,
+textarea {
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  font-size: 16px;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+}
+
+form button {
+  margin-top: 16px;
+  background-color: var(--main-color);
+  color: white;
+}
+
+form button:hover {
+  opacity: 0.9;
+}
+
+/* ===== Filter buttons ===== */
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter {
+  background-color: #e9ecef;
+}
+
+/* The filter that is currently selected */
+.filter.active {
+  background-color: var(--main-color);
+  color: white;
+}
+
+/* ===== List of options ===== */
+#options-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* cards fill the row */
+  gap: 16px;
+}
+
+.option {
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.option h3 {
+  margin: 8px 0;
+}
+
+.option p {
+  margin: 4px 0;
+}
+
+/* Small colored label showing "University" or "Job" */
+.tag {
+  display: inline-block;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.tag.University {
+  background-color: var(--university-color);
+}
+
+.tag.Job {
+  background-color: var(--job-color);
+}
+
+.stars {
+  color: #f59f00; /* gold */
+  font-size: 18px;
+}
+
+.delete-button {
+  margin-top: 10px;
+  background-color: #ffe3e3;
+  color: #c92a2a;
+  font-size: 14px;
+  padding: 6px 12px;
+}
+
+#empty-message {
+  color: #868e96;
+  text-align: center;
+}
+
+/* ===== Bottom of page ===== */
+footer {
+  text-align: center;
+  color: #868e96;
+  font-size: 14px;
+  padding: 16px;
+}
