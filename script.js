@@ -475,11 +475,50 @@ async function getWikipediaSummary(title) {
 
 // ----- Step B: Claude searches the official website -----
 
-const SEARCH_INSTRUCTIONS =
-  "You look up university admissions information for a student. " +
-  "Use the web search tool and base every answer only on what the pages you read actually say. " +
-  "Never guess or fill gaps from memory. If a page doesn't state something, use null for it. " +
-  "Keep each answer short and plain.";
+// The instructions Claude follows when it searches (your extractor rules).
+// Each answer comes back as one line, "Label: value", so we can read it.
+const SEARCH_INSTRUCTIONS = [
+  "You are an academic data extractor.",
+  "Your goal is to quickly and efficiently find concise, factual information about a university and a specific course.",
+  "",
+  "Search only the university's official website (e.g., *.edu, *.ac.uk, *.edu.au, etc.) and stop after reading the most relevant pages.",
+  "",
+  "Return clean, structured text with these sections, each on its own line as 'Section: value', using exactly these section names:",
+  "University:",
+  "Course:",
+  "City:",
+  "Country:",
+  "Application Deadline:",
+  "Entry Requirements:",
+  "How to Apply:",
+  "Course Description:",
+  "Important Notes:",
+  "",
+  "Rules:",
+  "- Keep each section short (1-2 sentences max).",
+  "- Do NOT include commentary, disclaimers, or search-limit notes.",
+  "- Do NOT explain what you did or why.",
+  "- If information is missing, write \"Not available\".",
+  "- Never repeat the same data in multiple sections.",
+  "- Prioritize official admissions and course pages.",
+  "- Stop reading after 3 pages.",
+  "- Keep total output under 1200 characters.",
+  "- Use plain text only - no markdown, no bullet points, no extra formatting.",
+  "- Application Deadline: give the next deadline that hasn't passed yet, written with day, month and year (for example 14 January 2027).",
+].join("\n");
+
+// The section names Claude uses, matched to our form's boxes
+const SECTION_KEYS = {
+  "university": "university",
+  "course": "course",
+  "city": "city",
+  "country": "country",
+  "application deadline": "deadline",
+  "entry requirements": "requirements",
+  "how to apply": "applicationInfo",
+  "course description": "courseDescription",
+  "important notes": "notes",
+};
 
 // Turn an error code from the Claude API into a message a person can act on
 function explainApiError(status) {
@@ -490,24 +529,64 @@ function explainApiError(status) {
   return "The online search isn't available right now (error " + status + "). Try again later.";
 }
 
-// Claude may wrap its JSON answer in other text, so we cut out the {...} part
-function extractJson(text) {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch (error) {
-    return null;
-  }
+// Read Claude's answer, which looks like:
+//   City: Edinburgh
+//   Application Deadline: 14 January 2027
+// and turn it into { city: "Edinburgh", deadline: "14 January 2027", ... }
+function parseSections(text) {
+  const result = {};
+  let currentKey = null;
+
+  text.split("\n").forEach(function (rawLine) {
+    // Remove any stray formatting like "**" or "- " at the start
+    const line = rawLine.replace(/\*\*/g, "").replace(/^\s*[-•]\s*/, "").trim();
+    if (!line) return;
+
+    const match = line.match(/^([A-Za-z ]+?)\s*:\s*(.*)$/);
+    const key = match ? SECTION_KEYS[match[1].trim().toLowerCase()] : null;
+
+    if (key) {
+      currentKey = key;
+      result[key] = match[2].trim();
+    } else if (currentKey) {
+      // A line without a section name belongs to the section above it
+      result[currentKey] = (result[currentKey] + " " + line).trim();
+    }
+  });
+  return result;
 }
 
-// Tidy up one answer: must be text, not empty, not "null", not too long
+// Tidy up one answer: must be text, not "Not available", not too long
 function cleanAnswer(value) {
   if (typeof value !== "string") return "";
   const text = value.trim();
-  if (/^(null|n\/a|none|unknown|not (published|found|stated))\.?$/i.test(text)) return "";
+  if (/^(not available|n\/a|none|unknown|null|not (published|found|stated))\.?$/i.test(text)) return "";
   return text.slice(0, 700);
+}
+
+// Turn a written date into "YYYY-MM-DD" so it fits the date box.
+// Understands "14 January 2027", "January 14, 2027" and "2027-01-14".
+// Returns "" if it can't find a full date.
+function parseDeadline(text) {
+  const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const monthNumber = function (name) {
+    const index = months.indexOf(name.slice(0, 3).toLowerCase());
+    return index === -1 ? null : index + 1;
+  };
+  const pad = function (n) { return String(n).padStart(2, "0"); };
+
+  // "14 January 2027" or "14th Jan 2027"
+  let m = text.match(/(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?,?\s+(\d{4})/);
+  if (m && monthNumber(m[2])) return m[3] + "-" + pad(monthNumber(m[2])) + "-" + pad(m[1]);
+
+  // "January 14, 2027"
+  m = text.match(/([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/);
+  if (m && monthNumber(m[1])) return m[3] + "-" + pad(monthNumber(m[1])) + "-" + pad(m[2]);
+
+  return "";
 }
 
 async function searchOfficialPages(apiKey, uniName, course, found) {
@@ -516,28 +595,14 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
 
   const question = [
     "University: " + uniName,
-    domain ? "Official website: " + found.website : "Official website: unknown, so prefer the university's own pages over other sites.",
-    found && found.city ? "Location from Wikidata: " + found.city + ", " + found.country : "",
     "Course: " + course,
+    domain ? "Official website: " + found.website : "",
     "Today's date: " + today,
-    "",
-    "Find, for the next intake whose application deadline hasn't passed yet:",
-    "1. deadline: the application deadline as YYYY-MM-DD (for UK undergraduate courses, the UCAS deadline the university lists counts).",
-    "2. deadlineNote: what that deadline is for, in a few words.",
-    "3. requirements: the entry requirements, mainly grades (e.g. A-levels, IB, or the local equivalent).",
-    "4. applicationInfo: how to apply, in one or two sentences.",
-    "5. courseDescription: what the course covers, in two or three sentences.",
-    "6. notes: anything important, like interviews, admissions tests, portfolios or language requirements.",
-    "7. city and country of the campus where this course is taught.",
-    "",
-    "Reply with only a JSON object, no other text:",
-    '{"deadline": "YYYY-MM-DD" or null, "deadlineNote": string or null, "requirements": string or null, ' +
-    '"applicationInfo": string or null, "courseDescription": string or null, "notes": string or null, ' +
-    '"city": string or null, "country": string or null, "sourceUrls": [the URLs of the pages you used]}',
-  ].filter(function (line) { return line !== null; }).join("\n");
+  ].filter(Boolean).join("\n");
 
-  // The web search tool. allowed_domains limits it to the official website.
-  const webSearch = { type: "web_search_20260209", name: "web_search", max_uses: 6 };
+  // The web search tool. max_uses: 3 matches the "stop after 3 pages" rule,
+  // and allowed_domains limits it to the official website when we know it.
+  const webSearch = { type: "web_search_20260209", name: "web_search", max_uses: 3 };
   if (domain) webSearch.allowed_domains = [domain];
 
   let messages = [{ role: "user", content: question }];
@@ -560,8 +625,9 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 16000,
-        output_config: { effort: "medium" },
+        max_tokens: 8000,
+        // "low" effort = faster, shorter searches, as the extractor rules ask
+        output_config: { effort: "low" },
         fallbacks: "default",
         system: SEARCH_INSTRUCTIONS,
         tools: [webSearch],
@@ -586,36 +652,41 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
     .filter(function (block) { return block.type === "text"; })
     .map(function (block) { return block.text; })
     .join("");
-  const answer = extractJson(answerText);
-  if (!answer) throw new Error("The online search didn't return usable details. Try again.");
+  const answer = parseSections(answerText);
+  if (Object.keys(answer).length === 0) {
+    throw new Error("The online search didn't return usable details. Try again.");
+  }
 
-  // Collect the pages used: the citations Claude attached, plus the ones it listed
+  // The pages used: first the ones Claude cited, then the pages its searches found
   const sources = [];
   allBlocks.forEach(function (block) {
     (block.citations || []).forEach(function (citation) {
       if (citation.url) sources.push(citation.url);
     });
   });
-  (Array.isArray(answer.sourceUrls) ? answer.sourceUrls : []).forEach(function (url) {
-    sources.push(url);
+  allBlocks.forEach(function (block) {
+    if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+      block.content.forEach(function (result) {
+        if (result.url) sources.push(result.url);
+      });
+    }
   });
   const cleanSources = sources.map(safeUrl).filter(Boolean)
     .filter(function (url, index, list) { return list.indexOf(url) === index; }) // remove repeats
-    .slice(0, 6);
+    .slice(0, 3);
 
-  // Only keep a deadline that is a real date and hasn't passed
-  let deadline = "";
+  // The deadline: turn the written date into one the date box understands.
+  // If it can't be read, or has passed, keep the wording in the notes instead.
   let notes = cleanAnswer(answer.notes);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(answer.deadline || "")) {
-    if (daysUntil(answer.deadline) >= 0) {
-      deadline = answer.deadline;
-    } else {
-      notes = ("The last published deadline (" + formatDate(answer.deadline) + ") has passed. " +
-        "Check the website for the next one. " + notes).trim();
-    }
+  const deadlineText = cleanAnswer(answer.deadline);
+  let deadline = deadlineText ? parseDeadline(deadlineText) : "";
+  if (deadline && daysUntil(deadline) < 0) {
+    notes = ("The last published deadline (" + formatDate(deadline) + ") has passed. " +
+      "Check the website for the next one. " + notes).trim();
+    deadline = "";
+  } else if (deadlineText && !deadline) {
+    notes = ("Application deadline: " + deadlineText + " " + notes).trim();
   }
-  const deadlineNote = cleanAnswer(answer.deadlineNote);
-  if (deadline && deadlineNote) notes = ("Deadline: " + deadlineNote + ". " + notes).trim();
 
   return {
     deadline: deadline,
@@ -627,7 +698,7 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
     country: cleanAnswer(answer.country),
     sources: cleanSources,
     domain: domain,
-    // Verified = every page used is on the official website
+    // Verified = we knew the official website, and every page used is on it
     verified: Boolean(domain) && cleanSources.length > 0 && cleanSources.every(function (url) {
       return isOnDomain(url, domain);
     }),
