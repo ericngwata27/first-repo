@@ -9,13 +9,14 @@
 //   4. Tabs
 //   5. The map
 //   6. Finding a location's coordinates
-//   7. The form (with validation)
-//   8. The university list
-//   9. The details panel
-//  10. Summary stats
-//  11. Toasts (pop-up messages)
-//  12. The Profile tab
-//  13. Start the app
+//   7. Auto-fill: searching online (new)
+//   8. The form (with validation and auto-fill)
+//   9. The university list
+//  10. The details panel
+//  11. Summary stats
+//  12. Toasts (pop-up messages)
+//  13. The Profile tab
+//  14. Start the app
 // =========================================================
 
 
@@ -331,7 +332,311 @@ async function findCoordinates(name, city, country) {
 
 
 // =========================================================
-// 7. THE FORM (with validation)
+// 7. AUTO-FILL: SEARCHING ONLINE FOR UNIVERSITY DATA (new)
+//
+// When you press "Find details", lookUpUniversity() runs two steps:
+//
+//   Step A - Wikidata and Wikipedia (free, no key needed)
+//     Wikidata is a big public database of facts. It gives us the
+//     university's official name, city, country, exact position
+//     on the map and official website. Wikipedia gives a short
+//     description of the university.
+//
+//   Step B - Claude with web search (only if you added an API key)
+//     Claude searches ONLY the university's official website (the
+//     one Wikidata gave us), reads the course pages, and sends back
+//     the deadline, entry requirements and so on.
+//
+// If every page Claude used is on the official website, the result
+// gets the "Verified from official sources" label.
+// =========================================================
+
+const API_KEY_STORAGE = "future-planner-claude-key";
+const CLAUDE_MODEL = "claude-opus-5-5";
+
+function getApiKey() {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+// "https://www.ed.ac.uk/study" -> "ed.ac.uk"
+function getDomain(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch (error) {
+    return "";
+  }
+}
+
+// True if a web address belongs to a domain (or one of its subdomains)
+function isOnDomain(url, domain) {
+  const host = getDomain(url);
+  return host === domain || host.endsWith("." + domain);
+}
+
+// Only allow normal web links (http or https). Returns null for anything else.
+function safeUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Keep the first few sentences of a long text
+function firstSentences(text, count) {
+  const sentences = (text || "").match(/[^.!?]+[.!?]+/g) || [];
+  return sentences.slice(0, count).join("").trim() || (text || "").trim();
+}
+
+
+// ----- Step A: Wikidata -----
+
+// Ask Wikidata's public API a question and get the answer as data.
+// "origin=*" tells Wikidata it's fine for any web page to read the answer.
+async function askWikidata(params) {
+  const url = "https://www.wikidata.org/w/api.php?format=json&origin=*&" + new URLSearchParams(params);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Wikidata didn't answer.");
+  return response.json();
+}
+
+// Wikidata stores each fact as a "claim" with a property code:
+// P17 = country, P131 = located in, P625 = map position, P856 = website.
+// This returns the value of the best claim for one property.
+function getClaim(entity, property) {
+  const claims = (entity.claims && entity.claims[property]) || [];
+  const best = claims.find(function (c) { return c.rank === "preferred"; }) ||
+               claims.find(function (c) { return c.rank !== "deprecated"; });
+  return best && best.mainsnak.datavalue ? best.mainsnak.datavalue.value : null;
+}
+
+async function findOnWikidata(name) {
+  // 1. Search Wikidata for things with this name
+  const search = await askWikidata({
+    action: "wbsearchentities", search: name, language: "en", type: "item", limit: "8",
+  });
+
+  // 2. Pick the first result described as a university, college, etc.
+  const looksLikeUniversity = /universit|college|institut|school|academy|polytechnic|conservatoire|hochschule/i;
+  const match = (search.search || []).find(function (result) {
+    return looksLikeUniversity.test(result.description || "");
+  });
+  if (!match) return null;
+
+  // 3. Get its full record
+  const data = await askWikidata({
+    action: "wbgetentities", ids: match.id, props: "labels|claims|sitelinks",
+    languages: "en", sitefilter: "enwiki",
+  });
+  const entity = data.entities[match.id];
+
+  const position = getClaim(entity, "P625");
+  const website = getClaim(entity, "P856");
+  const countryId = (getClaim(entity, "P17") || {}).id;
+  const cityId = (getClaim(entity, "P131") || getClaim(entity, "P276") || {}).id;
+
+  // 4. City and country are stored as codes (like "Q145"), so look up their names
+  const names = {};
+  const ids = [countryId, cityId].filter(Boolean);
+  if (ids.length > 0) {
+    const labels = await askWikidata({ action: "wbgetentities", ids: ids.join("|"), props: "labels", languages: "en" });
+    ids.forEach(function (id) {
+      const item = labels.entities[id];
+      names[id] = item && item.labels.en ? item.labels.en.value : "";
+    });
+  }
+
+  return {
+    officialName: entity.labels.en ? entity.labels.en.value : match.label,
+    city: cityId ? names[cityId] : "",
+    country: countryId ? names[countryId] : "",
+    lat: position ? position.latitude : null,
+    lng: position ? position.longitude : null,
+    website: safeUrl(website) || "",
+    wikipediaTitle: entity.sitelinks && entity.sitelinks.enwiki ? entity.sitelinks.enwiki.title : "",
+  };
+}
+
+// A short description of the university from Wikipedia
+async function getWikipediaSummary(title) {
+  if (!title) return "";
+  const response = await fetch("https://en.wikipedia.org/api/rest_v1/page/summary/" +
+    encodeURIComponent(title.replace(/ /g, "_")));
+  if (!response.ok) return "";
+  const page = await response.json();
+  return firstSentences(page.extract, 2);
+}
+
+
+// ----- Step B: Claude searches the official website -----
+
+const SEARCH_INSTRUCTIONS =
+  "You look up university admissions information for a student. " +
+  "Use the web search tool and base every answer only on what the pages you read actually say. " +
+  "Never guess or fill gaps from memory. If a page doesn't state something, use null for it. " +
+  "Keep each answer short and plain.";
+
+// Turn an error code from the Claude API into a message a person can act on
+function explainApiError(status) {
+  if (status === 401) return "Your Claude API key wasn't accepted. Check it in Auto-fill settings.";
+  if (status === 403) return "Your Claude API key isn't allowed to do this. Check your Anthropic account.";
+  if (status === 429) return "Too many searches at once. Wait a minute and try again.";
+  if (status === 400) return "The search request was rejected. Check that your Anthropic account has credit.";
+  return "The online search isn't available right now (error " + status + "). Try again later.";
+}
+
+// Claude may wrap its JSON answer in other text, so we cut out the {...} part
+function extractJson(text) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch (error) {
+    return null;
+  }
+}
+
+// Tidy up one answer: must be text, not empty, not "null", not too long
+function cleanAnswer(value) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (/^(null|n\/a|none|unknown|not (published|found|stated))\.?$/i.test(text)) return "";
+  return text.slice(0, 700);
+}
+
+async function searchOfficialPages(apiKey, uniName, course, found) {
+  const domain = found && found.website ? getDomain(found.website) : "";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const question = [
+    "University: " + uniName,
+    domain ? "Official website: " + found.website : "Official website: unknown, so prefer the university's own pages over other sites.",
+    found && found.city ? "Location from Wikidata: " + found.city + ", " + found.country : "",
+    "Course: " + course,
+    "Today's date: " + today,
+    "",
+    "Find, for the next intake whose application deadline hasn't passed yet:",
+    "1. deadline: the application deadline as YYYY-MM-DD (for UK undergraduate courses, the UCAS deadline the university lists counts).",
+    "2. deadlineNote: what that deadline is for, in a few words.",
+    "3. requirements: the entry requirements, mainly grades (e.g. A-levels, IB, or the local equivalent).",
+    "4. applicationInfo: how to apply, in one or two sentences.",
+    "5. courseDescription: what the course covers, in two or three sentences.",
+    "6. notes: anything important, like interviews, admissions tests, portfolios or language requirements.",
+    "7. city and country of the campus where this course is taught.",
+    "",
+    "Reply with only a JSON object, no other text:",
+    '{"deadline": "YYYY-MM-DD" or null, "deadlineNote": string or null, "requirements": string or null, ' +
+    '"applicationInfo": string or null, "courseDescription": string or null, "notes": string or null, ' +
+    '"city": string or null, "country": string or null, "sourceUrls": [the URLs of the pages you used]}',
+  ].filter(function (line) { return line !== null; }).join("\n");
+
+  // The web search tool. allowed_domains limits it to the official website.
+  const webSearch = { type: "web_search_20260209", name: "web_search", max_uses: 6 };
+  if (domain) webSearch.allowed_domains = [domain];
+
+  let messages = [{ role: "user", content: question }];
+  const allBlocks = [];
+  let reply = null;
+
+  // Long searches can pause part-way ("pause_turn"). When that happens we
+  // send back what we have so far and the search carries on, up to 3 times.
+  for (let round = 0; round < 4; round++) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        // Lets the search switch to a backup model if the main one declines
+        "anthropic-beta": "server-side-fallback-2026-07-01",
+        // Needed because this request comes straight from a web page
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 16000,
+        output_config: { effort: "medium" },
+        fallbacks: "default",
+        system: SEARCH_INSTRUCTIONS,
+        tools: [webSearch],
+        messages: messages,
+      }),
+    });
+
+    if (!response.ok) throw new Error(explainApiError(response.status));
+    reply = await response.json();
+    allBlocks.push.apply(allBlocks, reply.content || []);
+
+    if (reply.stop_reason !== "pause_turn") break;
+    messages = [messages[0], { role: "assistant", content: reply.content }];
+  }
+
+  if (reply.stop_reason === "refusal") {
+    throw new Error("The online search was declined. Try writing the course name differently.");
+  }
+
+  // Claude's final answer is the text in its last reply
+  const answerText = (reply.content || [])
+    .filter(function (block) { return block.type === "text"; })
+    .map(function (block) { return block.text; })
+    .join("");
+  const answer = extractJson(answerText);
+  if (!answer) throw new Error("The online search didn't return usable details. Try again.");
+
+  // Collect the pages used: the citations Claude attached, plus the ones it listed
+  const sources = [];
+  allBlocks.forEach(function (block) {
+    (block.citations || []).forEach(function (citation) {
+      if (citation.url) sources.push(citation.url);
+    });
+  });
+  (Array.isArray(answer.sourceUrls) ? answer.sourceUrls : []).forEach(function (url) {
+    sources.push(url);
+  });
+  const cleanSources = sources.map(safeUrl).filter(Boolean)
+    .filter(function (url, index, list) { return list.indexOf(url) === index; }) // remove repeats
+    .slice(0, 6);
+
+  // Only keep a deadline that is a real date and hasn't passed
+  let deadline = "";
+  let notes = cleanAnswer(answer.notes);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(answer.deadline || "")) {
+    if (daysUntil(answer.deadline) >= 0) {
+      deadline = answer.deadline;
+    } else {
+      notes = ("The last published deadline (" + formatDate(answer.deadline) + ") has passed. " +
+        "Check the website for the next one. " + notes).trim();
+    }
+  }
+  const deadlineNote = cleanAnswer(answer.deadlineNote);
+  if (deadline && deadlineNote) notes = ("Deadline: " + deadlineNote + ". " + notes).trim();
+
+  return {
+    deadline: deadline,
+    requirements: cleanAnswer(answer.requirements),
+    applicationInfo: cleanAnswer(answer.applicationInfo),
+    courseDescription: cleanAnswer(answer.courseDescription),
+    notes: notes,
+    city: cleanAnswer(answer.city),
+    country: cleanAnswer(answer.country),
+    sources: cleanSources,
+    domain: domain,
+    // Verified = every page used is on the official website
+    verified: Boolean(domain) && cleanSources.length > 0 && cleanSources.every(function (url) {
+      return isOnDomain(url, domain);
+    }),
+  };
+}
+
+
+// =========================================================
+// 8. THE FORM (with validation and auto-fill)
 // =========================================================
 
 const form = document.getElementById("uni-form");
@@ -340,8 +645,12 @@ const formTitle = document.getElementById("form-title");
 const formSubtitle = document.getElementById("form-subtitle");
 const formMessage = document.getElementById("form-message");
 const submitButton = document.getElementById("submit-button");
+const submitIcon = document.getElementById("submit-icon");
 const submitLabel = document.getElementById("submit-label");
+const searchAgainButton = document.getElementById("search-again");
 const cancelEditButton = document.getElementById("cancel-edit");
+const foundSection = document.getElementById("found-section");
+const lookupStatus = document.getElementById("lookup-status");
 
 // Which data property goes with which input box (by its id)
 const fields = {
@@ -352,9 +661,17 @@ const fields = {
   deadline: "deadline",
   requirements: "requirements",
   applicationInfo: "application-info",
+  courseDescription: "course-description",
+  notes: "notes",
   pros: "pros",
   cons: "cons",
 };
+
+// The boxes that the search fills in
+const AUTO_FIELDS = ["city", "country", "deadline", "requirements", "applicationInfo", "courseDescription", "notes"];
+
+// The result of the last search (null means no search yet)
+let lookup = null;
 
 function readForm() {
   const data = {};
@@ -369,6 +686,197 @@ function fillForm(uni) {
     document.getElementById(fields[key]).value = uni[key] || "";
   }
 }
+
+// The main button changes depending on what happens next:
+// "find" = Find details, "add" = Add to map, "save" = Save changes
+function setSubmitMode(mode) {
+  const icons = { find: "search", add: "plus", save: "check" };
+  const labels = { find: "Find details", add: "Add to map", save: "Save changes" };
+  submitIcon.innerHTML = '<i data-lucide="' + icons[mode] + '"></i>';
+  submitLabel.textContent = labels[mode];
+  refreshIcons();
+}
+
+// Fill one auto-filled box, and mark it as found or missing
+function setAutoField(key, value, wasSearched) {
+  const input = document.getElementById(fields[key]);
+  const field = input.closest(".field");
+  input.value = value || "";
+  field.classList.toggle("is-filled", Boolean(value));
+  field.classList.toggle("is-missing", !value);
+
+  if (key === "city" || key === "country") {
+    input.placeholder = "Not found. Please type it in.";
+  } else if (wasSearched) {
+    input.placeholder = "Not published";
+  } else {
+    input.placeholder = "Not looked up. Add it yourself, or turn on AI search in Auto-fill settings.";
+  }
+}
+
+function clearAutoFieldMarks() {
+  AUTO_FIELDS.forEach(function (key) {
+    const input = document.getElementById(fields[key]);
+    input.closest(".field").classList.remove("is-filled", "is-missing");
+    input.placeholder = "";
+  });
+}
+
+// ----- The loading animation -----
+function showSteps(steps, activeIndex) {
+  const list = makeElement("ul", "lookup-steps");
+  steps.forEach(function (text, index) {
+    const item = makeElement("li");
+    if (index < activeIndex) {
+      item.className = "is-done";
+      item.append(makeIcon("check"));
+    } else if (index === activeIndex) {
+      item.className = "is-active";
+      item.append(makeElement("span", "spinner"));
+    } else {
+      item.append(makeElement("span", "step-dot"));
+    }
+    item.append(makeElement("span", "", text));
+    list.append(item);
+  });
+
+  lookupStatus.innerHTML = "";
+  lookupStatus.append(list, makeElement("div", "shimmer-bar"));
+  lookupStatus.hidden = false;
+  refreshIcons();
+}
+
+// ----- The label shown after a search -----
+function showLookupResult(result, errorText) {
+  const box = makeElement("div", "lookup-result");
+  const badge = makeElement("span", "source-badge");
+  let message = "";
+
+  if (result.verified) {
+    badge.classList.add("is-verified");
+    badge.append(makeIcon("shield-check"), "Verified from official sources");
+    message = "Everything below comes from " + result.domain + ". Double-check important details there before you apply.";
+  } else if (result.aiSearched) {
+    badge.classList.add("is-partial");
+    badge.append(makeIcon("info"), "From web sources, not verified");
+    message = "Some details came from sites other than the official one. Check them on the university's website.";
+  } else if (result.foundOnWikidata) {
+    badge.classList.add("is-partial");
+    badge.append(makeIcon("info"), "Location found");
+    message = "We found the location and website. Add a Claude API key in Auto-fill settings to also look up deadlines and entry requirements.";
+  } else {
+    box.classList.add("is-error");
+    badge.classList.add("is-partial");
+    badge.append(makeIcon("circle-alert"), "University not found");
+    message = "Check the spelling of the university's name, or type the city and country below yourself.";
+  }
+
+  box.append(badge, makeElement("p", "", message));
+  if (errorText) {
+    const error = makeElement("p", "", errorText);
+    error.style.color = "var(--red)";
+    box.append(error);
+  }
+
+  lookupStatus.innerHTML = "";
+  lookupStatus.append(box);
+  lookupStatus.hidden = false;
+  refreshIcons();
+}
+
+// ----- Running a search -----
+async function lookUpUniversity() {
+  const name = document.getElementById("name").value.trim();
+  const course = document.getElementById("course").value.trim();
+
+  clearAllErrors();
+  if (name.length < 2 || course.length < 2) {
+    if (name.length < 2) setFieldError("name", "Enter the university's name.");
+    if (course.length < 2) setFieldError("course", "Enter the course you're interested in.");
+    document.getElementById(name.length < 2 ? "name" : "course").focus();
+    return;
+  }
+
+  const apiKey = getApiKey();
+  const steps = apiKey
+    ? ["Finding the university", "Searching the official website", "Filling in the form"]
+    : ["Finding the university", "Filling in the form"];
+
+  submitButton.disabled = true;
+  searchAgainButton.disabled = true;
+  showFormMessage("");
+  showSteps(steps, 0);
+
+  // Step A: Wikidata and Wikipedia
+  let found = null;
+  let about = "";
+  try {
+    found = await findOnWikidata(name);
+    if (found) about = await getWikipediaSummary(found.wikipediaTitle);
+  } catch (error) {
+    found = null; // carry on: Step B can still find the city and country
+  }
+
+  // Step B: Claude searches the official website (only with an API key)
+  let details = null;
+  let errorText = "";
+  if (apiKey) {
+    showSteps(steps, 1);
+    try {
+      details = await searchOfficialPages(apiKey, found ? found.officialName : name, course, found);
+    } catch (error) {
+      errorText = error.message || "The online search failed. Try again.";
+    }
+  }
+
+  showSteps(steps, steps.length - 1);
+
+  // Combine the two. For city and country the official website wins,
+  // because it knows which campus teaches the course.
+  const result = {
+    name: name,
+    course: course,
+    city: (details && details.city) || (found && found.city) || "",
+    country: (details && details.country) || (found && found.country) || "",
+    lat: found ? found.lat : null,
+    lng: found ? found.lng : null,
+    website: found ? found.website : "",
+    about: about,
+    sources: details ? details.sources : [],
+    domain: details ? details.domain : "",
+    verified: Boolean(details && details.verified),
+    aiSearched: Boolean(details),
+    foundOnWikidata: Boolean(found),
+  };
+
+  // Fill in the form
+  foundSection.hidden = false;
+  setAutoField("city", result.city, true);
+  setAutoField("country", result.country, true);
+  AUTO_FIELDS.slice(2).forEach(function (key) {
+    setAutoField(key, details ? details[key] : "", result.aiSearched);
+  });
+
+  lookup = result;
+  showLookupResult(result, errorText);
+  submitButton.disabled = false;
+  searchAgainButton.disabled = false;
+  searchAgainButton.hidden = false;
+  setSubmitMode(editingId ? "save" : "add");
+}
+
+searchAgainButton.addEventListener("click", lookUpUniversity);
+
+// If you change the name or course after a search, the button goes back
+// to "Find details" so the information matches what you typed
+["name", "course"].forEach(function (id) {
+  document.getElementById(id).addEventListener("input", function () {
+    if (lookup && !editingId) {
+      lookup = null;
+      setSubmitMode("find");
+    }
+  });
+});
 
 // ----- Validation: show or clear a message under one field -----
 function setFieldError(inputId, message) {
@@ -396,8 +904,8 @@ function validateForm(data) {
   // Required fields
   if (data.name.length < 2) problem("name", "Enter the university's name.");
   if (data.course.length < 2) problem("course", "Enter the course you're interested in.");
-  if (data.city.length < 2) problem("city", "Enter the city the university is in.");
-  if (data.country.length < 2) problem("country", "Enter the country.");
+  if (data.city.length < 2) problem("city", "We couldn't find the city automatically. Please type it in.");
+  if (data.country.length < 2) problem("country", "We couldn't find the country automatically. Please type it in.");
 
   // The deadline is optional, but if there is one it must be a real date
   const deadlineInput = document.getElementById("deadline");
@@ -439,13 +947,18 @@ function showFormMessage(text, type) {
 function startEditing(id) {
   const uni = findUniversity(id);
   editingId = id;
+  lookup = null;
   fillForm(uni);
   clearAllErrors();
+  clearAutoFieldMarks();
   showFormMessage("");
 
   formTitle.textContent = "Edit university";
-  formSubtitle.textContent = "Changing " + uni.name + ".";
-  submitLabel.textContent = "Save changes";
+  formSubtitle.textContent = "Changing " + uni.name + ". Use Search again to refresh the details.";
+  setSubmitMode("save");
+  foundSection.hidden = false;
+  lookupStatus.hidden = true;
+  searchAgainButton.hidden = false;
   cancelEditButton.hidden = false;
   formCard.classList.add("is-editing");
 
@@ -453,14 +966,20 @@ function startEditing(id) {
   document.getElementById("name").focus({ preventScroll: true });
 }
 
+// Put the form back to its starting state
 function stopEditing() {
   editingId = null;
+  lookup = null;
   form.reset();
   clearAllErrors();
+  clearAutoFieldMarks();
 
   formTitle.textContent = "Add a university";
-  formSubtitle.textContent = "We'll find it on the map for you.";
-  submitLabel.textContent = "Add to map";
+  formSubtitle.textContent = "Type the university and course. We'll look up the rest.";
+  setSubmitMode("find");
+  foundSection.hidden = true;
+  lookupStatus.hidden = true;
+  searchAgainButton.hidden = true;
   cancelEditButton.hidden = true;
   formCard.classList.remove("is-editing");
 }
@@ -471,20 +990,44 @@ cancelEditButton.addEventListener("click", function () {
 });
 
 // ----- Submitting the form -----
-// "async" lets us wait for the location search to finish.
+// First press (no search yet): run the search.
+// Second press: save the university and add its pin.
 form.addEventListener("submit", async function (event) {
   event.preventDefault(); // stop the page from reloading
+
+  if (!lookup && !editingId) {
+    await lookUpUniversity();
+    return;
+  }
 
   const data = readForm();
   if (!validateForm(data)) return;
 
   const oldUni = editingId ? findUniversity(editingId) : null;
 
-  // Only look up the location if it's new or has changed
-  const placeChanged = !oldUni ||
-    oldUni.name !== data.name || oldUni.city !== data.city || oldUni.country !== data.country;
+  // Extra details from the search that don't have their own box
+  if (lookup) {
+    data.website = lookup.website;
+    data.about = lookup.about;
+    data.sources = lookup.sources;
+    data.verified = lookup.verified;
+    data.aiSearched = lookup.aiSearched;
+  }
 
-  if (placeChanged) {
+  // Where to put the pin:
+  //  1. Wikidata's exact position, if the city and country weren't changed
+  //  2. the old position, if editing and the place didn't change
+  //  3. otherwise, look it up with the map search (as before)
+  const placeUnchanged = oldUni &&
+    oldUni.name === data.name && oldUni.city === data.city && oldUni.country === data.country;
+
+  if (lookup && lookup.lat !== null && lookup.city === data.city && lookup.country === data.country) {
+    data.lat = lookup.lat;
+    data.lng = lookup.lng;
+  } else if (placeUnchanged) {
+    data.lat = oldUni.lat;
+    data.lng = oldUni.lng;
+  } else {
     submitButton.disabled = true;
     showFormMessage("Finding " + data.city + " on the map...", "working");
 
@@ -504,9 +1047,6 @@ form.addEventListener("submit", async function (event) {
     } finally {
       submitButton.disabled = false; // "finally" runs whether it worked or not
     }
-  } else {
-    data.lat = oldUni.lat;
-    data.lng = oldUni.lng;
   }
 
   let savedId;
@@ -529,8 +1069,47 @@ form.addEventListener("submit", async function (event) {
 });
 
 
+// ----- Auto-fill settings: saving your API key -----
+const apiKeyInput = document.getElementById("api-key");
+const aiState = document.getElementById("ai-state");
+
+function updateAiState() {
+  const key = getApiKey();
+  aiState.textContent = key ? "AI search on" : "AI search off";
+  aiState.classList.toggle("is-on", Boolean(key));
+  apiKeyInput.value = "";
+  apiKeyInput.placeholder = key ? "Saved key ending in " + key.slice(-4) : "sk-ant-...";
+}
+
+document.getElementById("save-key").addEventListener("click", function () {
+  const key = apiKeyInput.value.trim();
+  if (!key.startsWith("sk-ant-")) {
+    showToast("That doesn't look like a Claude API key. It should start with sk-ant-", "circle-alert");
+    return;
+  }
+  try {
+    localStorage.setItem(API_KEY_STORAGE, key);
+  } catch (error) {
+    showToast("Your browser blocked saving the key.", "circle-alert");
+    return;
+  }
+  updateAiState();
+  showToast("API key saved. AI search is on.");
+});
+
+document.getElementById("remove-key").addEventListener("click", function () {
+  try {
+    localStorage.removeItem(API_KEY_STORAGE);
+  } catch (error) {
+    // nothing to remove
+  }
+  updateAiState();
+  showToast("API key removed. AI search is off.", "trash-2");
+});
+
+
 // =========================================================
-// 8. THE UNIVERSITY LIST
+// 9. THE UNIVERSITY LIST
 // =========================================================
 
 const uniList = document.getElementById("uni-list");
@@ -564,7 +1143,16 @@ function drawList() {
     deadline.append(makeDeadlineChip(uni.deadline));
     if (uni.deadline) deadline.append(formatDate(uni.deadline));
 
-    main.append(makeElement("span", "uni-name", uni.name), meta, deadline);
+    const nameRow = makeElement("span", "uni-name", uni.name);
+    // NEW: a small green shield if the details came from the official website
+    if (uni.verified) {
+      const mark = makeElement("span", "verified-mark");
+      mark.title = "Verified from official sources";
+      mark.append(makeIcon("shield-check"));
+      nameRow.append(mark);
+    }
+
+    main.append(nameRow, meta, deadline);
     main.addEventListener("click", function () {
       selectUniversity(uni.id, true);
     });
@@ -622,7 +1210,7 @@ function deleteUniversity(id) {
 
 
 // =========================================================
-// 9. THE DETAILS PANEL
+// 10. THE DETAILS PANEL
 // =========================================================
 
 const detailsPanel = document.getElementById("details-panel");
@@ -648,14 +1236,33 @@ function makeFact(iconName, text) {
   return row;
 }
 
-// A section with a small heading and some text
-function makePanelSection(title, iconName, text) {
+// A section with a small heading and some text.
+// If the online search ran but found nothing, it says "Not published".
+function makePanelSection(title, iconName, text, wasSearched) {
   const section = makeElement("div", "panel-section");
   const heading = makeElement("h4", "eyebrow");
   heading.append(makeIcon(iconName), title);
-  const body = text ? makeElement("p", "", text) : makeElement("p", "empty-text", "Not added yet");
+
+  let body;
+  if (text) {
+    body = makeElement("p", "", text);
+  } else if (wasSearched) {
+    body = makeElement("p", "not-published", "Not published");
+  } else {
+    body = makeElement("p", "empty-text", "Not added yet");
+  }
   section.append(heading, body);
   return section;
+}
+
+// NEW: a link that opens in a new tab (only for normal web addresses)
+function makeLink(url, text) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = text;
+  return link;
 }
 
 // A colored box with a bullet list (used for pros and cons)
@@ -688,9 +1295,18 @@ function drawDetails() {
 
   panelBody.innerHTML = "";
 
-  // Deadline chip at the top
-  const statusRow = makeElement("div", "panel-status");
+  // Deadline chip and (NEW) where the details came from
+  const statusRow = makeElement("div", "panel-badges");
   statusRow.append(makeDeadlineChip(uni.deadline));
+  if (uni.verified) {
+    const badge = makeElement("span", "source-badge is-verified");
+    badge.append(makeIcon("shield-check"), "Verified from official sources");
+    statusRow.append(badge);
+  } else if (uni.aiSearched) {
+    const badge = makeElement("span", "source-badge is-partial");
+    badge.append(makeIcon("info"), "Not verified");
+    statusRow.append(badge);
+  }
 
   // Key facts
   const facts = makeElement("div", "panel-facts");
@@ -698,6 +1314,37 @@ function drawDetails() {
     makeFact("map-pin", uni.city + ", " + uni.country),
     makeFact("calendar", uni.deadline ? "Deadline " + formatDate(uni.deadline) : "No deadline set")
   );
+
+  // NEW: link to the official website
+  const website = safeUrl(uni.website);
+  if (website) {
+    const row = makeElement("div", "fact");
+    row.append(makeIcon("external-link"), makeLink(website, getDomain(website)));
+    facts.append(row);
+  }
+
+  // NEW: the pages the details came from
+  const sourcesSection = makeElement("div", "panel-section");
+  const sourceUrls = (uni.sources || []).map(safeUrl).filter(Boolean);
+  if (sourceUrls.length > 0) {
+    const heading = makeElement("h4", "eyebrow");
+    heading.append(makeIcon("link"), "Sources");
+    const list = makeElement("ul", "sources");
+    sourceUrls.forEach(function (url) {
+      const item = document.createElement("li");
+      item.append(makeLink(url, url.replace(/^https?:\/\/(www\.)?/, "")));
+      list.append(item);
+    });
+    sourcesSection.append(heading, list);
+  }
+
+  // NEW: the short description from Wikipedia
+  const aboutSection = makeElement("div", "panel-section");
+  if (uni.about) {
+    const heading = makeElement("h4", "eyebrow");
+    heading.append(makeIcon("info"), "About the university (Wikipedia)");
+    aboutSection.append(heading, makeElement("p", "", uni.about));
+  }
 
   // Pros and cons side by side
   const prosCons = makeElement("div", "pros-cons");
@@ -725,9 +1372,13 @@ function drawDetails() {
     makeElement("h2", "panel-title", uni.name),
     makeElement("p", "panel-course", uni.course),
     facts,
-    makePanelSection("Entry requirements", "award", uni.requirements),
-    makePanelSection("How to apply", "file-text", uni.applicationInfo),
+    makePanelSection("Course description", "book-open", uni.courseDescription, uni.aiSearched),
+    makePanelSection("Entry requirements", "award", uni.requirements, uni.aiSearched),
+    makePanelSection("How to apply", "file-text", uni.applicationInfo, uni.aiSearched),
+    makePanelSection("Important notes", "lightbulb", uni.notes, uni.aiSearched),
+    aboutSection,
     prosCons,
+    sourcesSection,
     actions
   );
   detailsPanel.scrollTop = 0;
@@ -754,7 +1405,7 @@ function selectUniversity(id, flyToIt) {
 
 
 // =========================================================
-// 10. SUMMARY STATS
+// 11. SUMMARY STATS
 // =========================================================
 
 function drawStats() {
@@ -786,11 +1437,12 @@ function redrawEverything() {
 
 
 // =========================================================
-// 11. TOASTS (small messages that pop up in the corner)
+// 12. TOASTS (small messages that pop up in the corner)
 // =========================================================
 
 function showToast(message, iconName) {
   const toast = makeElement("div", "toast");
+  if (iconName === "circle-alert") toast.classList.add("is-warning"); // amber icon for warnings
   toast.append(makeIcon(iconName || "circle-check"), makeElement("span", "", message));
   document.getElementById("toast-area").append(toast);
   refreshIcons();
@@ -806,7 +1458,7 @@ function showToast(message, iconName) {
 
 
 // =========================================================
-// 12. THE PROFILE TAB
+// 13. THE PROFILE TAB
 // Each text box saves itself every time you type.
 // =========================================================
 
@@ -882,9 +1534,10 @@ document.querySelectorAll(".copy-button").forEach(function (button) {
 
 
 // =========================================================
-// 13. START THE APP
+// 14. START THE APP
 // =========================================================
 
 document.getElementById("year").textContent = new Date().getFullYear();
+updateAiState(); // show whether AI search is on
 redrawEverything();
 zoomToAllPins();

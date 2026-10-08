@@ -1184,6 +1184,10 @@ textarea {
   color: var(--green);
 }
 
+.toast.is-warning .lucide {
+  color: var(--amber);
+}
+
 .toast.is-leaving {
   animation: toast-out var(--medium) ease both;
 }
@@ -1379,4 +1383,267 @@ textarea {
     bottom: 16px;
     max-width: none;
   }
+}
+
+
+/* =========================================================
+   15. AUTO-FILL (new)
+   Styles for the settings box, the loading animation, the
+   "Verified from official sources" label and the sources list.
+   ========================================================= */
+
+.small {
+  font-size: 0.82rem;
+}
+
+/* ----- Auto-fill settings (a fold-out box above the form) ----- */
+.ai-settings {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  margin-bottom: 20px;
+}
+
+.ai-settings summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  list-style: none; /* hides the default triangle */
+}
+
+.ai-settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-settings summary .lucide {
+  color: var(--accent-text);
+}
+
+.ai-state {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.ai-state.is-on {
+  color: var(--green);
+}
+
+.ai-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 14px 14px;
+}
+
+/* ----- Loading animation and result label ----- */
+.lookup-status {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: var(--surface-2);
+  animation: fade-up var(--medium) ease both;
+}
+
+/* A spinning circle */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent-text);
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* The list of search steps: done, in progress, waiting */
+.lookup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lookup-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--ink-3);
+}
+
+.lookup-steps li.is-active {
+  color: var(--ink);
+}
+
+.lookup-steps li.is-done {
+  color: var(--ink-2);
+}
+
+.lookup-steps li.is-done .lucide {
+  color: var(--green);
+}
+
+.step-dot {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.step-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+/* A thin bar with a light sweeping across it while searching */
+.shimmer-bar {
+  height: 3px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent-text), transparent);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  background-color: var(--line);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: -50% 0; }
+  to   { background-position: 150% 0; }
+}
+
+/* Result labels shown after a search */
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.source-badge.is-verified {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.source-badge.is-partial {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.lookup-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lookup-result p {
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+
+.lookup-result.is-error p {
+  color: var(--red);
+}
+
+/* ----- The auto-filled part of the form ----- */
+.found-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: fade-up var(--medium) ease both;
+}
+
+.legend-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* Empty fields after a search say "Not published" in amber */
+.field.is-missing input::placeholder,
+.field.is-missing textarea::placeholder {
+  color: var(--amber);
+  opacity: 0.85;
+}
+
+/* Fields that were filled automatically get a soft green edge */
+.field.is-filled input,
+.field.is-filled textarea {
+  border-color: rgba(60, 201, 143, 0.35);
+}
+
+/* Optional pros and cons, folded away */
+.thoughts summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  margin-bottom: 12px;
+}
+
+/* ----- Details panel additions ----- */
+.panel-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.not-published {
+  color: var(--amber);
+  font-style: italic;
+}
+
+.sources {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+}
+
+.sources a,
+.fact a {
+  color: var(--accent-text);
+  text-decoration: none;
+  word-break: break-all; /* long web addresses wrap instead of overflowing */
+}
+
+.sources a:hover,
+.fact a:hover {
+  text-decoration: underline;
+}
+
+/* Small shield next to verified universities in the list */
+.verified-mark {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: 6px;
+  color: var(--green);
+}
+
+.verified-mark .lucide {
+  width: 15px;
+  height: 15px;
 }
