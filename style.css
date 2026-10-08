@@ -2339,3 +2339,13 @@ textarea {
   font-weight: 500;
   color: var(--ink-3);
 }
+
+/* Round labels that would overlap the one before move below the line */
+.tl-marker-label.is-below {
+  bottom: auto;
+  top: calc(100% + 5px);
+}
+
+.tl-track.has-labels-below {
+  margin-bottom: 22px;
+}

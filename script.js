@@ -561,7 +561,9 @@ const SEARCH_INSTRUCTIONS = [
   "- Stop reading after 3 pages.",
   "- Keep total output under 1600 characters.",
   "- Use plain text only - no markdown, no bullet points, no extra formatting.",
-  "- Application Deadline: give the next deadline that hasn't passed yet, written with day, month and year (for example 14 January 2027).",
+  "- Application Deadline: give the next deadline that hasn't passed yet, written with day, month and year (for example 14 January 2027). " +
+    "Always give a date, even for rolling admissions (for example: 30 June 2027 (rolling until then)). " +
+    "If the page only gives a month, use the last day of that month.",
   "- Admissions Type: write exactly one of: rolling, rounds, single deadline, equal consideration, unknown. " +
     "rolling = applications are reviewed as they arrive or places are filled in order. " +
     "rounds = several named rounds or deadlines (Round 1, Early Decision, Early Action, Regular Decision, priority deadline). " +
@@ -569,7 +571,9 @@ const SEARCH_INSTRUCTIONS = [
     "single deadline = just one deadline.",
   "- Admissions Rounds: list every round in date order as 'Name - date', separated by semicolons " +
     "(for example: Round 1 - 15 November 2026; Round 2 - 15 January 2027). Include the year when the page gives it. " +
-    "Never merge rounds into one. Write \"Not available\" if there are no named rounds.",
+    "Never merge rounds into one. Write \"Not available\" if there are no named rounds. " +
+    "If rounds differ by campus, list only the rounds for the campus given in City. If you can't tell which campus, " +
+    "start each round's name with its campus (for example: Paris Round 1 - 18 November 2026). Never mix campuses without naming them.",
   "- Recommended Window: copy the university's own advice about when to apply, in its own words " +
     "(for example: Apply October-December because spaces fill progressively). Write \"Not available\" if it gives none.",
 ].join("\n");
@@ -634,6 +638,18 @@ function cleanAnswer(value) {
   return text.slice(0, 700);
 }
 
+// Real month names and their usual short forms. (Checking the whole word
+// stops "Decision" from being read as "December".)
+const MONTH_NAMES = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+const MONTH_WORD = new RegExp("^(?:" + MONTH_NAMES + ")$", "i");
+
+// "November" -> 11, "Sept" -> 9, "Decision" -> 0 (not a month)
+function monthFromWord(word) {
+  if (!MONTH_WORD.test(word)) return 0;
+  return ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    .indexOf(word.slice(0, 3).toLowerCase()) + 1;
+}
+
 // Turn a written date into "YYYY-MM-DD" so it fits the date box.
 // Understands "14 January 2027", "January 14, 2027" and "2027-01-14".
 // Returns "" if it can't find a full date.
@@ -641,20 +657,18 @@ function parseDeadline(text) {
   const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return iso[0];
 
-  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-  const monthNumber = function (name) {
-    const index = months.indexOf(name.slice(0, 3).toLowerCase());
-    return index === -1 ? null : index + 1;
-  };
   const pad = function (n) { return String(n).padStart(2, "0"); };
 
-  // "14 January 2027" or "14th Jan 2027"
-  let m = text.match(/(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?,?\s+(\d{4})/);
-  if (m && monthNumber(m[2])) return m[3] + "-" + pad(monthNumber(m[2])) + "-" + pad(m[1]);
+  // "14 January 2027" or "14th Jan 2027" (checks every candidate, so
+  // "Decision 1, 2026" is skipped and a real date later on is still found)
+  for (const m of text.matchAll(/(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?,?\s+(\d{4})/g)) {
+    if (monthFromWord(m[2])) return m[3] + "-" + pad(monthFromWord(m[2])) + "-" + pad(m[1]);
+  }
 
   // "January 14, 2027"
-  m = text.match(/([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/);
-  if (m && monthNumber(m[1])) return m[3] + "-" + pad(monthNumber(m[1])) + "-" + pad(m[2]);
+  for (const m of text.matchAll(/([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/g)) {
+    if (monthFromWord(m[1])) return m[3] + "-" + pad(monthFromWord(m[1])) + "-" + pad(m[2]);
+  }
 
   return "";
 }
@@ -666,22 +680,14 @@ function parseLooseDate(text) {
   const fullDate = parseDeadline(text);
   if (fullDate) return fullDate;
 
-  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-  const monthNumber = function (word) {
-    return months.indexOf(word.slice(0, 3).toLowerCase()) + 1; // 0 = not a month
-  };
-
   let day = 0;
   let month = 0;
-  let match = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,})/);
-  if (match && monthNumber(match[2])) {
-    day = Number(match[1]);
-    month = monthNumber(match[2]);
-  } else {
-    match = text.match(/\b([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
-    if (match && monthNumber(match[1])) {
-      day = Number(match[2]);
-      month = monthNumber(match[1]);
+  for (const m of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,})/g)) {
+    if (monthFromWord(m[2])) { day = Number(m[1]); month = monthFromWord(m[2]); break; }
+  }
+  if (!month) {
+    for (const m of text.matchAll(/\b([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/g)) {
+      if (monthFromWord(m[1])) { day = Number(m[2]); month = monthFromWord(m[1]); break; }
     }
   }
   if (!day || day > 31) return "";
@@ -692,6 +698,29 @@ function parseLooseDate(text) {
   let year = today.getFullYear();
   if (year + "-" + pad(month) + "-" + pad(day) < todayText) year++;   // already passed this year
   return year + "-" + pad(month) + "-" + pad(day);
+}
+
+// "June 2027" or "rolling until June" -> the last day of that month.
+// Months without a year get the next time that month ends.
+function endOfMonthDate(text) {
+  let match = null;
+  for (const m of text.matchAll(new RegExp("\\b(" + MONTH_NAMES + ")\\b\\.?(?:\\s+(\\d{4}))?", "gi"))) {
+    // "may" without a year is usually the verb ("you may apply")
+    if (/^may$/i.test(m[1]) && !m[2]) continue;
+    match = m;
+    break;
+  }
+  if (!match) return "";
+
+  const month = monthFromWord(match[1]);
+  const today = new Date();
+  let year = match[2] ? Number(match[2]) : today.getFullYear();
+  let lastDay = new Date(year, month, 0);
+  if (!match[2] && lastDay < today) {
+    year++;
+    lastDay = new Date(year, month, 0);
+  }
+  return year + "-" + String(month).padStart(2, "0") + "-" + String(lastDay.getDate()).padStart(2, "0");
 }
 
 // The admissions types we understand
@@ -707,6 +736,25 @@ function parseAdmissionsType(text) {
   return "unknown";
 }
 
+// Take the date out of a round's text and tidy what's left into a name
+function roundLabel(item) {
+  const month = "(?:" + MONTH_NAMES + ")\\b\\.?";
+  const datePatterns = [
+    new RegExp("\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?" + month + ",?(?:\\s+\\d{4})?", "gi"),   // 18 November (2026)
+    new RegExp(month + "\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?", "gi"),                     // November 18 (, 2026)
+    /\d{4}-\d{2}-\d{2}/g,                                                                    // 2026-11-18
+  ];
+  let label = item;
+  datePatterns.forEach(function (pattern) { label = label.replace(pattern, " "); });
+  label = label
+    .replace(/[:\u2013\u2014]/g, " ")          // colons and long dashes between parts
+    .replace(/\s+-\s+|\s+-$|^-\s+/g, " ")      // short dashes used as separators
+    .replace(/[(),]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (label || "Round").slice(0, 40);
+}
+
 // "Round 1 - 15 November 2026; Round 2 - 15 January 2027"
 //   -> [{ label: "Round 1", date: "2026-11-15" }, { label: "Round 2", date: "2027-01-15" }]
 // Rounds without a readable date are left out.
@@ -716,10 +764,9 @@ function parseRoundsList(text) {
     const date = parseLooseDate(item);
     if (!date) return;
 
-    // The name is the part before the dash or colon
-    let label = item.split(/\s[-\u2013\u2014]\s|:\s/)[0].trim();
-    if (!label || /\d/.test(label.replace(/\b(round|stage|phase)\s*\d\b/i, ""))) label = "Round";
-    label = label.slice(0, 40);
+    // The name is everything except the date, e.g.
+    // "Paris/Madrid: Round 1 - 18 November" -> "Paris/Madrid Round 1"
+    const label = roundLabel(item);
 
     const duplicate = rounds.some(function (r) { return r.label.toLowerCase() === label.toLowerCase() && r.date === date; });
     if (!duplicate) rounds.push({ label: label, date: date });
@@ -818,7 +865,21 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
   // If it can't be read, or has passed, keep the wording in the notes instead.
   let notes = cleanAnswer(answer.notes);
   const deadlineText = cleanAnswer(answer.deadline);
-  let deadline = deadlineText ? parseDeadline(deadlineText) : "";
+  let deadline = deadlineText ? parseDeadline(deadlineText) || parseLooseDate(deadlineText) : "";
+
+  // Only a month ("June 2027", "rolling until June")? Use the last day of that month.
+  if (deadlineText && !deadline) {
+    deadline = endOfMonthDate(deadlineText);
+    if (deadline) notes = ("Deadline estimated as " + formatDate(deadline) + " from \"" + deadlineText + "\". " + notes).trim();
+  }
+
+  // Still nothing? Use the next round that hasn't passed yet.
+  const rounds = parseRoundsList(answer.admissionsRounds);
+  if (!deadline) {
+    const nextRound = rounds.find(function (round) { return daysUntil(round.date) >= 0; });
+    if (nextRound) deadline = nextRound.date;
+  }
+
   if (deadline && daysUntil(deadline) < 0) {
     notes = ("The last published deadline (" + formatDate(deadline) + ") has passed. " +
       "Check the website for the next one. " + notes).trim();
@@ -839,7 +900,7 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
     domain: domain,
     // NEW: structured admissions data for the Timeline planner
     admissionsType: parseAdmissionsType(answer.admissionsType),
-    admissionsRounds: parseRoundsList(answer.admissionsRounds),
+    admissionsRounds: rounds,
     recommendedWindow: cleanAnswer(answer.recommendedWindow),
     // Verified = we knew the official website, and every page used is on it
     verified: Boolean(domain) && cleanSources.length > 0 && cleanSources.every(function (url) {
