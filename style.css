@@ -25,41 +25,53 @@
    one value here changes it across the whole site.
    ========================================================= */
 :root {
-  /* Neutrals: a cool gray with a slight blue tint */
-  --bg: #f3f5f9;          /* page background */
-  --surface: #ffffff;     /* cards and panels */
-  --surface-2: #f8f9fc;   /* inputs and subtle fills */
-  --ink: #111a2e;         /* main text */
-  --ink-2: #4a5468;       /* secondary text */
-  --ink-3: #8a93a6;       /* hints and placeholders */
-  --line: #e2e6ee;        /* borders */
+  /* DARK THEME (new): the whole site gets its colors from these tokens,
+     so switching to dark mostly meant changing the values below. */
 
-  /* Brand color: a confident indigo blue */
-  --accent: #3451d1;
-  --accent-hover: #2840b0;
-  --accent-soft: #eceffc;
+  /* Tell the browser the page is dark, so built-in parts like the
+     date picker and scrollbars turn dark too */
+  color-scheme: dark;
 
-  /* Deadline colors: green = plenty of time, amber = getting close, red = urgent */
-  --green: #129165;
-  --green-soft: #e3f5ec;
-  --amber: #d17c00;
-  --amber-soft: #fdf1dc;
-  --red: #dc3d43;
-  --red-soft: #fdeaea;
-  --gray: #98a1b3;
-  --gray-soft: #eef0f4;
+  /* Neutrals: deep blue-black backgrounds and soft grays */
+  --bg: #0e1118;          /* page background */
+  --surface: #161a23;     /* cards and panels */
+  --surface-2: #1d2230;   /* inputs and subtle fills */
+  --ink: #e9ecf3;         /* main text (bright, easy to read) */
+  --ink-2: #a5adbf;       /* secondary text */
+  --ink-3: #737c92;       /* hints and placeholders */
+  --line: #272d3b;        /* borders */
+  --line-strong: #3a4256; /* borders on hover */
+
+  /* Strong accent: an electric blue */
+  --accent: #4f6ef7;               /* buttons and highlights */
+  --accent-hover: #6a85ff;
+  --accent-text: #93a6ff;          /* lighter version, for accent-colored text on dark */
+  --accent-soft: rgba(79, 110, 247, 0.16);
+
+  /* Deadline colors, brightened so they stand out on dark */
+  --green: #3cc98f;
+  --green-soft: rgba(60, 201, 143, 0.14);
+  --amber: #f2aa3c;
+  --amber-soft: rgba(242, 170, 60, 0.14);
+  --red: #f3646b;
+  --red-soft: rgba(243, 100, 107, 0.14);
+  --gray: #7f889c;
+  --gray-soft: rgba(127, 136, 156, 0.16);
+
+  /* See-through backgrounds for things floating on top (header, legend) */
+  --glass: rgba(22, 26, 35, 0.85);
 
   /* Fonts */
   --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
   --font-body: "Figtree", "Segoe UI", system-ui, sans-serif;
 
-  /* Shapes and shadows */
+  /* Shapes and shadows (darker shadows for a dark page) */
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;
-  --shadow-sm: 0 1px 2px rgba(17, 26, 46, 0.06);
-  --shadow: 0 1px 2px rgba(17, 26, 46, 0.05), 0 6px 20px rgba(17, 26, 46, 0.06);
-  --shadow-lg: 0 12px 40px rgba(17, 26, 46, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
 
   /* Speed of animations */
   --fast: 150ms;
@@ -130,7 +142,7 @@ main.container {
   position: sticky; /* stays at the top while scrolling */
   top: 0;
   z-index: 1100;    /* above the map */
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--glass);
   backdrop-filter: blur(10px); /* frosted-glass effect */
   border-bottom: 1px solid var(--line);
 }
@@ -204,8 +216,8 @@ main.container {
 }
 
 .tab.is-active {
-  background: var(--surface);
-  color: var(--accent);
+  background: var(--surface-2);
+  color: var(--accent-text);
   box-shadow: var(--shadow-sm);
 }
 
@@ -219,7 +231,7 @@ main.container {
    4. SHARED PIECES
    ========================================================= */
 
-/* ----- Cards (white boxes) ----- */
+/* ----- Cards (the dark boxes) ----- */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -267,7 +279,7 @@ main.container {
 
 .button:hover {
   background: var(--surface-2);
-  border-color: #cfd5e1;
+  border-color: var(--line-strong);
 }
 
 .button:active {
@@ -278,7 +290,7 @@ main.container {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
-  box-shadow: 0 1px 2px rgba(52, 81, 209, 0.3);
+  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.3); /* soft blue glow */
 }
 
 .button-primary:hover {
@@ -297,7 +309,7 @@ main.container {
 
 .button-danger:hover {
   background: var(--red-soft);
-  border-color: #f4c5c6;
+  border-color: transparent;
 }
 
 .button-small {
@@ -335,7 +347,7 @@ main.container {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(52, 81, 209, 0.35);
+  outline: 3px solid rgba(147, 166, 255, 0.45);
   outline-offset: 2px;
 }
 
@@ -362,7 +374,7 @@ textarea:focus-visible {
 .chip.level-later  { background: var(--green-soft); color: var(--green); }
 .chip.level-soon   { background: var(--amber-soft); color: var(--amber); }
 .chip.level-urgent { background: var(--red-soft);   color: var(--red); }
-.chip.level-none   { background: var(--gray-soft);  color: #6b7488; }
+.chip.level-none   { background: var(--gray-soft);  color: var(--ink-2); }
 
 
 /* =========================================================
@@ -417,7 +429,7 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   margin-bottom: 28px;
-  background: #e8ecf2;
+  background: var(--surface);
 }
 
 #map {
@@ -425,28 +437,65 @@ textarea:focus-visible {
   inset: 0;
   z-index: 0;
   font-family: var(--font-body);
+  background: var(--bg); /* color shown while map pictures load */
 }
 
-/* Tone down the street map's bright colors so it matches the site */
+/* DARK THEME: darken the satellite photos slightly so they sit
+   comfortably on the dark page and the pins stand out */
+.tiles-satellite {
+  filter: brightness(0.82) saturate(0.9);
+}
+
+/* The street map is light, so we flip its colors to make it dark.
+   invert() swaps light and dark; hue-rotate() turns the colors back. */
 .tiles-street {
-  filter: saturate(0.55) brightness(1.04) contrast(0.95);
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) saturate(0.6);
 }
 
-/* Restyle Leaflet's own buttons to match ours */
+/* Restyle Leaflet's own buttons to match the dark theme */
 .leaflet-bar,
 .leaflet-control-layers {
-  border: 1px solid var(--line) !important;
+  border: 1px solid var(--line-strong) !important;
   border-radius: 10px !important;
   box-shadow: var(--shadow) !important;
   overflow: hidden;
 }
 
-.leaflet-bar a {
+.leaflet-bar a,
+.leaflet-control-layers {
+  background: var(--surface) !important;
   color: var(--ink) !important;
+  border-color: var(--line) !important;
+  transition: background var(--fast);
 }
 
-.leaflet-control-attribution {
+.leaflet-bar a:hover {
+  background: var(--surface-2) !important;
+}
+
+/* The layer switcher's icon is a dark picture, so we lighten it */
+.leaflet-control-layers-toggle {
+  filter: invert(1) brightness(1.2);
+}
+
+.leaflet-control-layers-expanded {
+  padding: 8px 12px !important;
+  font-size: 0.85rem;
+}
+
+.leaflet-control-layers-separator {
+  border-top-color: var(--line) !important;
+}
+
+/* The small credits line in the corner */
+.leaflet-container .leaflet-control-attribution {
   font-size: 10px;
+  background: var(--glass);
+  color: var(--ink-3);
+}
+
+.leaflet-control-attribution a {
+  color: var(--ink-2);
 }
 
 /* ----- Custom pins: a teardrop with a graduation cap inside ----- */
@@ -458,7 +507,7 @@ textarea:focus-visible {
   transform: rotate(-45deg);
   background: var(--pin-color, var(--accent));
   border: 2px solid white;
-  box-shadow: 0 3px 10px rgba(17, 26, 46, 0.3);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
   display: grid;
   place-items: center;
   transition: transform var(--fast);
@@ -489,15 +538,15 @@ textarea:focus-visible {
 /* The selected pin is bigger, with a soft ring around it */
 .pin.is-selected {
   transform: rotate(-45deg) scale(1.25);
-  box-shadow: 0 0 0 6px rgba(52, 81, 209, 0.25), 0 3px 10px rgba(17, 26, 46, 0.3);
+  box-shadow: 0 0 0 6px rgba(147, 166, 255, 0.4), 0 3px 10px rgba(0, 0, 0, 0.5);
 }
 
 /* ----- Hover tooltip on pins ----- */
 .leaflet-tooltip.pin-tooltip {
   font-family: var(--font-body);
-  background: var(--ink);
-  color: white;
-  border: none;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   padding: 6px 10px;
   box-shadow: var(--shadow-lg);
@@ -505,7 +554,7 @@ textarea:focus-visible {
 }
 
 .leaflet-tooltip.pin-tooltip::before {
-  border-top-color: var(--ink); /* the little arrow */
+  border-top-color: var(--surface-2); /* the little arrow */
 }
 
 .pin-tooltip strong {
@@ -529,7 +578,7 @@ textarea:focus-visible {
   gap: 6px 14px;
   font-size: 0.78rem;
   color: var(--ink-2);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--glass);
   backdrop-filter: blur(6px);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -752,7 +801,7 @@ legend {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--accent-text);
   padding: 0;
   margin-bottom: 12px;
 }
@@ -806,7 +855,7 @@ textarea::placeholder {
 
 input:hover,
 textarea:hover {
-  border-color: #cfd5e1;
+  border-color: var(--line-strong);
 }
 
 input:focus,
@@ -908,7 +957,7 @@ textarea {
 .uni-card.level-none   { --strip-color: var(--gray); }
 
 .uni-card:hover {
-  border-color: #cfd5e1;
+  border-color: var(--line-strong);
   box-shadow: var(--shadow);
   transform: translateY(-1px);
 }
@@ -929,7 +978,7 @@ textarea {
 }
 
 .uni-card-main:focus-visible {
-  outline: 3px solid rgba(52, 81, 209, 0.35);
+  outline: 3px solid rgba(147, 166, 255, 0.45);
   outline-offset: 4px;
   border-radius: 6px;
 }
@@ -991,7 +1040,7 @@ textarea {
   height: 48px;
   border-radius: 50%;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   margin-bottom: 10px;
 }
 
@@ -1054,7 +1103,7 @@ textarea {
 }
 
 .profile-label .lucide {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .profile-footer {
@@ -1121,8 +1170,9 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--ink);
-  color: white;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
   padding: 12px 16px;
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
@@ -1131,7 +1181,7 @@ textarea {
 }
 
 .toast .lucide {
-  color: #5ee0a7;
+  color: var(--green);
 }
 
 .toast.is-leaving {

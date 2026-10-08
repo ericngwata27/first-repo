@@ -221,21 +221,34 @@ if (typeof L === "undefined") {
   // Map pictures ("tiles") from Esri. Free, and no API key needed.
   const esriTiles = "https://server.arcgisonline.com/ArcGIS/rest/services/";
 
-  const streetMap = L.tileLayer(esriTiles + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors",
-    maxZoom: 19,
-    className: "tiles-street", // lets style.css soften the colors
-  });
-
   const satelliteMap = L.tileLayer(esriTiles + "World_Imagery/MapServer/tile/{z}/{y}/{x}", {
     attribution: "Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics",
     maxZoom: 19,
+    className: "tiles-satellite", // lets style.css darken it slightly
   });
 
-  streetMap.addTo(map);
+  const streetMap = L.tileLayer(esriTiles + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors",
+    maxZoom: 19,
+    className: "tiles-street", // lets style.css turn it dark
+  });
 
-  // Button to switch between street map and satellite, in the top-left corner
-  L.control.layers({ "Street map": streetMap, "Satellite": satelliteMap }, null, { position: "topleft" }).addTo(map);
+  // NEW: country and city names drawn on top of the satellite photos,
+  // since satellite pictures on their own have no labels
+  const placeNames = L.tileLayer(esriTiles + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+  });
+
+  // CHANGED: satellite view (with place names) is now the default
+  satelliteMap.addTo(map);
+  placeNames.addTo(map);
+
+  // Button to switch map styles and turn place names on or off (top-left corner)
+  L.control.layers(
+    { "Satellite": satelliteMap, "Street map (dark)": streetMap },
+    { "Place names": placeNames },
+    { position: "topleft" }
+  ).addTo(map);
 }
 
 // Build a pin. Its color comes from the deadline.
