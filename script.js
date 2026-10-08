@@ -610,8 +610,9 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
   let reply = null;
 
   // Long searches can pause part-way ("pause_turn"). When that happens we
-  // send back what we have so far and the search carries on, up to 3 times.
-  for (let round = 0; round < 4; round++) {
+  // send back what we have so far and the search carries on, up to 2 times.
+  // (Each time re-sends everything found so far, so more rounds cost more.)
+  for (let round = 0; round < 3; round++) {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -818,7 +819,7 @@ function showSteps(steps, activeIndex) {
 }
 
 // ----- The label shown after a search -----
-function showLookupResult(result, errorText) {
+function showLookupResult(result, errorText, cachedAt) {
   const box = makeElement("div", "lookup-result");
   const badge = makeElement("span", "source-badge");
   let message = "";
@@ -843,6 +844,11 @@ function showLookupResult(result, errorText) {
   }
 
   box.append(badge, makeElement("p", "", message));
+  if (cachedAt) {
+    box.append(makeElement("p", "", "Saved search from " +
+      new Date(cachedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" }) +
+      ", so it was free. Use Search again for the latest details."));
+  }
   if (errorText) {
     const error = makeElement("p", "", errorText);
     error.style.color = "var(--red)";
@@ -855,8 +861,62 @@ function showLookupResult(result, errorText) {
   refreshIcons();
 }
 
+// ----- Remembering searches (saves money) -----
+// A Claude search costs money, so a successful one is remembered in this
+// browser for 7 days. Looking up the same university and course again
+// then costs nothing. "Search again" always does a fresh search.
+
+const SEARCH_CACHE_KEY = "future-planner-search-cache";
+const CACHE_DAYS = 7;
+
+function searchCacheKey(name, course) {
+  return (name + "|" + course).toLowerCase().replace(/\s+/g, " ");
+}
+
+function loadSearchCache() {
+  try {
+    return JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY)) || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+// Returns a remembered search, or null if there isn't a usable one
+function getCachedSearch(key) {
+  const entry = loadSearchCache()[key];
+  if (!entry) return null;
+
+  const ageInDays = (Date.now() - entry.savedAt) / (24 * 60 * 60 * 1000);
+  if (ageInDays > CACHE_DAYS) return null;
+
+  // If the remembered deadline has passed since, search again for the new one
+  if (entry.details.deadline && daysUntil(entry.details.deadline) < 0) return null;
+  return entry;
+}
+
+function saveCachedSearch(key, entry) {
+  const cache = loadSearchCache();
+  cache[key] = entry;
+
+  // Keep only the 30 most recent searches so storage doesn't fill up
+  const keys = Object.keys(cache).sort(function (a, b) {
+    return cache[b].savedAt - cache[a].savedAt;
+  });
+  keys.slice(30).forEach(function (oldKey) {
+    delete cache[oldKey];
+  });
+
+  try {
+    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    // storage full or blocked: the search still works, it just isn't remembered
+  }
+}
+
 // ----- Running a search -----
-async function lookUpUniversity() {
+// options.fresh = true skips remembered searches (used by "Search again")
+async function lookUpUniversity(options) {
+  const fresh = Boolean(options && options.fresh);
   const name = document.getElementById("name").value.trim();
   const course = document.getElementById("course").value.trim();
 
@@ -878,29 +938,52 @@ async function lookUpUniversity() {
   showFormMessage("");
   showSteps(steps, 0);
 
-  // Step A: Wikidata and Wikipedia
+  // Use a remembered search if there is one (only for AI searches, since
+  // those are the ones that cost money)
+  const cacheKey = searchCacheKey(name, course);
+  const cached = apiKey && !fresh ? getCachedSearch(cacheKey) : null;
+
   let found = null;
   let about = "";
-  try {
-    found = await findOnWikidata(name);
-    if (found) about = await getWikipediaSummary(found.wikipediaTitle);
-  } catch (error) {
-    found = null; // carry on: Step B can still find the city and country
-  }
-
-  // Step B: Claude searches the official website (only with an API key)
   let details = null;
   let errorText = "";
-  if (apiKey) {
-    showSteps(steps, 1);
+
+  if (cached) {
+    found = cached.found;
+    about = cached.about;
+    details = cached.details;
+  } else {
+    // Step A: Wikidata
     try {
-      details = await searchOfficialPages(apiKey, found ? found.officialName : name, course, found);
+      found = await findOnWikidata(name);
     } catch (error) {
-      errorText = error.message || "The online search failed. Try again.";
+      found = null; // carry on: Step B can still find the city and country
+    }
+
+    // The Wikipedia description runs at the same time as Step B,
+    // because Step B doesn't need it. (If it fails, we just skip it.)
+    const aboutRequest = found
+      ? getWikipediaSummary(found.wikipediaTitle).catch(function () { return ""; })
+      : Promise.resolve("");
+
+    // Step B: Claude searches the official website (only with an API key)
+    if (apiKey) {
+      showSteps(steps, 1);
+      try {
+        details = await searchOfficialPages(apiKey, found ? found.officialName : name, course, found);
+      } catch (error) {
+        errorText = error.message || "The online search failed. Try again.";
+      }
+    }
+
+    about = await aboutRequest;
+    showSteps(steps, steps.length - 1);
+
+    // Remember a successful AI search for next time
+    if (details) {
+      saveCachedSearch(cacheKey, { savedAt: Date.now(), found: found, about: about, details: details });
     }
   }
-
-  showSteps(steps, steps.length - 1);
 
   // Combine the two. For city and country the official website wins,
   // because it knows which campus teaches the course.
@@ -929,14 +1012,16 @@ async function lookUpUniversity() {
   });
 
   lookup = result;
-  showLookupResult(result, errorText);
+  showLookupResult(result, errorText, cached ? cached.savedAt : null);
   submitButton.disabled = false;
   searchAgainButton.disabled = false;
   searchAgainButton.hidden = false;
   setSubmitMode(editingId ? "save" : "add");
 }
 
-searchAgainButton.addEventListener("click", lookUpUniversity);
+searchAgainButton.addEventListener("click", function () {
+  lookUpUniversity({ fresh: true });
+});
 
 // If you change the name or course after a search, the button goes back
 // to "Find details" so the information matches what you typed
