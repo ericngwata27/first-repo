@@ -1380,3 +1380,144 @@ textarea {
     max-width: none;
   }
 }
+
+
+/* =========================================================
+   15. MINIMAL THEME
+   Everything above is the normal dark theme. This section
+   makes it calmer and simpler by:
+     - removing shadows, glows and see-through blur effects
+     - using thin outlines instead
+     - using one muted accent color
+     - softening the deadline colors
+   Delete this whole section to go back to the normal dark theme.
+   ========================================================= */
+:root {
+  --bg: #111214;          /* near-black, almost no color */
+  --surface: #111214;     /* cards are the same color as the page... */
+  --surface-2: #18191c;   /* ...and only inputs are slightly lighter */
+  --ink: #e6e6e8;
+  --ink-2: #9a9ca3;
+  --ink-3: #6a6c74;
+  --line: #26272b;        /* thin outlines do the work shadows did */
+  --line-strong: #3a3b41;
+
+  --accent: #8a9bc4;               /* one muted, dusty blue */
+  --accent-hover: #a0afd2;
+  --accent-text: #a9b6d6;
+  --accent-soft: rgba(138, 155, 196, 0.12);
+
+  --green: #7fb89a;                /* softer deadline colors */
+  --green-soft: rgba(127, 184, 154, 0.1);
+  --amber: #cfa865;
+  --amber-soft: rgba(207, 168, 101, 0.1);
+  --red: #d98282;
+  --red-soft: rgba(217, 130, 130, 0.1);
+  --gray: #6e7079;
+  --gray-soft: rgba(110, 112, 121, 0.14);
+
+  --glass: #111214;
+
+  /* No shadows anywhere */
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-lg: none;
+
+  /* Slightly squarer corners */
+  --radius: 8px;
+  --radius-lg: 10px;
+}
+
+/* No frosted-glass blur */
+.site-header,
+.legend {
+  backdrop-filter: none;
+}
+
+/* Logo: an outlined square instead of a filled one */
+.logo-mark {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+}
+
+/* Tabs: plain text, with a thin line under the active one */
+.tabs {
+  background: transparent;
+  padding: 0;
+  gap: 20px;
+}
+
+.tab {
+  padding: 8px 2px;
+  border-radius: 0;
+  border-bottom: 1px solid transparent;
+}
+
+.tab.is-active {
+  background: transparent;
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+/* Main button: light outline style instead of a solid colored block */
+.button-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+.button-primary:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+/* Cards: no lift on hover, just a slightly brighter outline */
+.uni-card:hover {
+  transform: none;
+}
+
+.uni-card.is-selected {
+  border-color: var(--ink-2);
+  box-shadow: none;
+}
+
+/* A thinner colored strip on list cards */
+.uni-card::before {
+  width: 3px;
+}
+
+/* Focus: a thin outline instead of a glow */
+input:focus,
+textarea:focus {
+  border-color: var(--ink-2);
+  box-shadow: none;
+}
+
+.form-card.is-editing {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+/* Pins: flat, with a thin dark outline instead of a shadow */
+.pin {
+  box-shadow: none;
+  border: 2px solid #111214;
+}
+
+.pin.is-selected {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+/* Chips: just a colored dot and text, no background */
+.chip {
+  background: transparent !important;
+  padding-left: 0;
+}
+
+/* Toasts and tooltips: flat */
+.toast,
+.leaflet-tooltip.pin-tooltip {
+  box-shadow: none;
+}
