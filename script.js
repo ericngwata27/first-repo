@@ -547,18 +547,31 @@ const SEARCH_INSTRUCTIONS = [
   "How to Apply:",
   "Course Description:",
   "Important Notes:",
+  "Admissions Type:",
+  "Admissions Rounds:",
+  "Recommended Window:",
   "",
   "Rules:",
   "- Keep each section short (1-2 sentences max).",
   "- Do NOT include commentary, disclaimers, or search-limit notes.",
   "- Do NOT explain what you did or why.",
   "- If information is missing, write \"Not available\".",
-  "- Never repeat the same data in multiple sections.",
+  "- Never repeat the same data in multiple sections. Exception: Admissions Rounds lists every round, even if one of them is also the Application Deadline.",
   "- Prioritize official admissions and course pages.",
   "- Stop reading after 3 pages.",
-  "- Keep total output under 1200 characters.",
+  "- Keep total output under 1600 characters.",
   "- Use plain text only - no markdown, no bullet points, no extra formatting.",
   "- Application Deadline: give the next deadline that hasn't passed yet, written with day, month and year (for example 14 January 2027).",
+  "- Admissions Type: write exactly one of: rolling, rounds, single deadline, equal consideration, unknown. " +
+    "rolling = applications are reviewed as they arrive or places are filled in order. " +
+    "rounds = several named rounds or deadlines (Round 1, Early Decision, Early Action, Regular Decision, priority deadline). " +
+    "equal consideration = every application received by the deadline is treated the same (for example the UCAS equal consideration deadline). " +
+    "single deadline = just one deadline.",
+  "- Admissions Rounds: list every round in date order as 'Name - date', separated by semicolons " +
+    "(for example: Round 1 - 15 November 2026; Round 2 - 15 January 2027). Include the year when the page gives it. " +
+    "Never merge rounds into one. Write \"Not available\" if there are no named rounds.",
+  "- Recommended Window: copy the university's own advice about when to apply, in its own words " +
+    "(for example: Apply October-December because spaces fill progressively). Write \"Not available\" if it gives none.",
 ].join("\n");
 
 // The section names Claude uses, matched to our form's boxes
@@ -572,6 +585,9 @@ const SECTION_KEYS = {
   "how to apply": "applicationInfo",
   "course description": "courseDescription",
   "important notes": "notes",
+  "admissions type": "admissionsType",
+  "admissions rounds": "admissionsRounds",
+  "recommended window": "recommendedWindow",
 };
 
 // Turn an error code from the Claude API into a message a person can act on
@@ -641,6 +657,74 @@ function parseDeadline(text) {
   if (m && monthNumber(m[1])) return m[3] + "-" + pad(monthNumber(m[1])) + "-" + pad(m[2]);
 
   return "";
+}
+
+// Like parseDeadline, but also understands dates without a year
+// ("15 November", "Nov 15"). Those get the next time that day comes round.
+// Returns "" if there's no date. (The Timeline uses this too.)
+function parseLooseDate(text) {
+  const fullDate = parseDeadline(text);
+  if (fullDate) return fullDate;
+
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const monthNumber = function (word) {
+    return months.indexOf(word.slice(0, 3).toLowerCase()) + 1; // 0 = not a month
+  };
+
+  let day = 0;
+  let month = 0;
+  let match = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,})/);
+  if (match && monthNumber(match[2])) {
+    day = Number(match[1]);
+    month = monthNumber(match[2]);
+  } else {
+    match = text.match(/\b([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
+    if (match && monthNumber(match[1])) {
+      day = Number(match[2]);
+      month = monthNumber(match[1]);
+    }
+  }
+  if (!day || day > 31) return "";
+
+  const pad = function (n) { return String(n).padStart(2, "0"); };
+  const today = new Date();
+  const todayText = today.getFullYear() + "-" + pad(today.getMonth() + 1) + "-" + pad(today.getDate());
+  let year = today.getFullYear();
+  if (year + "-" + pad(month) + "-" + pad(day) < todayText) year++;   // already passed this year
+  return year + "-" + pad(month) + "-" + pad(day);
+}
+
+// The admissions types we understand
+const ADMISSIONS_TYPES = ["rolling", "rounds", "singleDeadline", "equalConsideration", "unknown"];
+
+// "Equal consideration" -> "equalConsideration", anything unclear -> "unknown"
+function parseAdmissionsType(text) {
+  const value = (text || "").toLowerCase();
+  if (/rolling/.test(value)) return "rolling";
+  if (/equal consideration/.test(value)) return "equalConsideration";
+  if (/single/.test(value)) return "singleDeadline";
+  if (/round/.test(value)) return "rounds";
+  return "unknown";
+}
+
+// "Round 1 - 15 November 2026; Round 2 - 15 January 2027"
+//   -> [{ label: "Round 1", date: "2026-11-15" }, { label: "Round 2", date: "2027-01-15" }]
+// Rounds without a readable date are left out.
+function parseRoundsList(text) {
+  const rounds = [];
+  cleanAnswer(text).split(/;|\n|\|/).forEach(function (item) {
+    const date = parseLooseDate(item);
+    if (!date) return;
+
+    // The name is the part before the dash or colon
+    let label = item.split(/\s[-\u2013\u2014]\s|:\s/)[0].trim();
+    if (!label || /\d/.test(label.replace(/\b(round|stage|phase)\s*\d\b/i, ""))) label = "Round";
+    label = label.slice(0, 40);
+
+    const duplicate = rounds.some(function (r) { return r.label.toLowerCase() === label.toLowerCase() && r.date === date; });
+    if (!duplicate) rounds.push({ label: label, date: date });
+  });
+  return rounds.slice(0, 8);
 }
 
 async function searchOfficialPages(apiKey, uniName, course, found) {
@@ -753,6 +837,10 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
     country: cleanAnswer(answer.country),
     sources: cleanSources,
     domain: domain,
+    // NEW: structured admissions data for the Timeline planner
+    admissionsType: parseAdmissionsType(answer.admissionsType),
+    admissionsRounds: parseRoundsList(answer.admissionsRounds),
+    recommendedWindow: cleanAnswer(answer.recommendedWindow),
     // Verified = we knew the official website, and every page used is on it
     verified: Boolean(domain) && cleanSources.length > 0 && cleanSources.every(function (url) {
       return isOnDomain(url, domain);
@@ -920,6 +1008,9 @@ function showLookupResult(result, errorText, cachedAt) {
 // browser for 7 days. Looking up the same university and course again
 // then costs nothing. "Search again" always does a fresh search.
 
+// Bumped when the saved search format changes, so older saved searches
+// (without the admissions fields) are searched again once
+const CACHE_VERSION = 2;
 const CACHE_DAYS = 7;
 
 function searchCacheKey(name, course) {
@@ -933,7 +1024,7 @@ function loadSearchCache() {
 // Returns a remembered search, or null if there isn't a usable one
 function getCachedSearch(key) {
   const entry = loadSearchCache()[key];
-  if (!entry) return null;
+  if (!entry || entry.version !== CACHE_VERSION) return null;
 
   const ageInDays = (Date.now() - entry.savedAt) / (24 * 60 * 60 * 1000);
   if (ageInDays > CACHE_DAYS) return null;
@@ -1027,7 +1118,7 @@ async function lookUpUniversity(options) {
 
     // Remember a successful AI search for next time
     if (details) {
-      saveCachedSearch(cacheKey, { savedAt: Date.now(), found: found, about: about, details: details });
+      saveCachedSearch(cacheKey, { version: CACHE_VERSION, savedAt: Date.now(), found: found, about: about, details: details });
     }
   }
 
@@ -1047,6 +1138,9 @@ async function lookUpUniversity(options) {
     verified: Boolean(details && details.verified),
     aiSearched: Boolean(details),
     foundOnWikidata: Boolean(found),
+    admissionsType: details ? details.admissionsType : "",
+    admissionsRounds: details ? details.admissionsRounds : [],
+    recommendedWindow: details ? details.recommendedWindow : "",
   };
 
   // Fill in the form
@@ -1214,6 +1308,14 @@ form.addEventListener("submit", async function (event) {
     data.sources = lookup.sources;
     data.verified = lookup.verified;
     data.aiSearched = lookup.aiSearched;
+
+    // Structured admissions data (only from a Claude search, so a search
+    // without an API key doesn't wipe out what an earlier search found)
+    if (lookup.aiSearched) {
+      data.admissionsType = lookup.admissionsType;
+      data.admissionsRounds = lookup.admissionsRounds;
+      data.recommendedWindow = lookup.recommendedWindow;
+    }
   }
 
   // Where to put the pin:
@@ -1451,6 +1553,30 @@ function makePanelSection(title, iconName, text, wasSearched) {
   return section;
 }
 
+// NEW: how this university admits students (from auto-fill), e.g.
+// "Rolling admissions · Recommended: apply October-December"
+const ADMISSIONS_TYPE_LABELS = {
+  rolling: "Rolling admissions",
+  rounds: "Several rounds",
+  singleDeadline: "Single deadline",
+  equalConsideration: "Equal consideration (applying early doesn't change your chances)",
+};
+
+function makeAdmissionsSection(uni) {
+  const parts = [];
+  if (ADMISSIONS_TYPE_LABELS[uni.admissionsType]) parts.push(ADMISSIONS_TYPE_LABELS[uni.admissionsType]);
+  (uni.admissionsRounds || []).forEach(function (round) {
+    parts.push(round.label + ": " + formatDate(round.date));
+  });
+  if (uni.recommendedWindow) parts.push("Recommended: " + uni.recommendedWindow);
+
+  const section = makeElement("div");
+  if (parts.length > 0) {
+    section.append(makePanelSection("Admissions", "calendar", parts.join("\n")));
+  }
+  return section;
+}
+
 // NEW: a link that opens in a new tab (only for normal web addresses)
 function makeLink(url, text) {
   const link = document.createElement("a");
@@ -1572,6 +1698,7 @@ function drawDetails() {
     makePanelSection("Entry requirements", "award", uni.requirements, uni.aiSearched),
     makePanelSection("How to apply", "file-text", uni.applicationInfo, uni.aiSearched),
     makePanelSection("Important notes", "lightbulb", uni.notes, uni.aiSearched),
+    makeAdmissionsSection(uni),
     aboutSection,
     prosCons,
     sourcesSection,
