@@ -128,6 +128,7 @@ const SOURCES = {
   type: "Based on admissionsType",
   competitive: "Based on competitiveness signals",
   fallback: "Based on fallback text detection",
+  rounds: "Based on admissionsRounds",
   manual: "Based on the round you chose",
 };
 
@@ -142,6 +143,7 @@ const SOURCES = {
 //   plannedDate: "2026-12-20",       your planned submission date, or ""
 //   plannedAuto: true,               true if the planner chose that date
 //   status: "applying",              one of the STATUSES keys
+//   campus: "all",                   "all", or the campus you chose ("Paris")
 //   targetRound: "auto",             "auto" = follow the recommendation,
 //                                    or a round key like "r1" or "final"
 //   manualRounds: [                  rounds you added yourself
@@ -184,6 +186,7 @@ const TimelineStore = {
       status: saved.status || "researching",
       targetRound: saved.targetRound || "auto",
       manualRounds: Array.isArray(saved.manualRounds) ? saved.manualRounds : [],
+      campus: typeof saved.campus === "string" && saved.campus ? saved.campus : "all",   // your campus, or "all"
       milestones: milestones,
       updatedAt: saved.updatedAt || null,
     };
@@ -339,18 +342,28 @@ function detectRounds(text) {
 }
 
 // STRUCTURED: turn auto-fill's admissionsRounds into timeline rounds
+// Rounds can have a campus ({ campus: "Paris", label: "Round 1", date }).
+// Rounds saved before campuses existed have it inside the label
+// ("Paris/Madrid Round 1"), so we split it out (splitCampus is in script.js).
 function structuredRounds(list) {
   const rounds = [];
   list.forEach(function (item) {
     if (!item || !isDateText(item.date)) return;
-    const label = String(item.label || "Round").slice(0, 40);
+    let campus = typeof item.campus === "string" ? item.campus.trim() : "";
+    let name = String(item.label || "Round").slice(0, 40);
+    if (!campus) {
+      const parts = splitCampus(name);
+      campus = parts.campus;
+      name = parts.rest || name;
+    }
+    const label = campus ? campus + " " + name : name;
     const short = shortRoundName(label);
-    let key = short.toLowerCase();
+    let key = short.toLowerCase().replace(/\s+/g, "-");
     // Two rounds with the same short name get a number added ("r", "r-2")
     let n = 2;
-    while (rounds.some(function (r) { return r.key === key; })) key = short.toLowerCase() + "-" + n++;
-    rounds.push({ key: key, label: label, short: short, date: item.date,
-      binding: /early decision/i.test(label), source: "auto-fill" });
+    while (rounds.some(function (r) { return r.key === key; })) key = short.toLowerCase().replace(/\s+/g, "-") + "-" + n++;
+    rounds.push({ key: key, label: label, short: short, date: item.date, campus: campus,
+      binding: /early decision/i.test(name), source: "auto-fill" });
   });
   return rounds;
 }
@@ -439,6 +452,23 @@ function analyseAdmissions(uni, entry) {
   // Rounds: the structured list first, otherwise look for them in the text
   const savedRounds = Array.isArray(uni.admissionsRounds) ? structuredRounds(uni.admissionsRounds) : [];
   let rounds = savedRounds.length > 0 ? savedRounds : detectRounds(text);
+  const roundsSource = savedRounds.length > 0 ? "admissionsRounds" : "fallback";
+
+  // Campuses: every campus named in the rounds. If you chose one, keep its
+  // rounds plus rounds that apply to every campus (no campus named).
+  const campuses = [];
+  rounds.forEach(function (round) {
+    if (round.campus && campuses.indexOf(round.campus) === -1) campuses.push(round.campus);
+  });
+  const campus = campuses.indexOf(entry.campus) !== -1 ? entry.campus : "all";
+  const otherCampusDates = [];
+  if (campus !== "all") {
+    rounds = rounds.filter(function (round) {
+      const keep = !round.campus || round.campus === campus;
+      if (!keep) otherCampusDates.push(round.date);
+      return keep;
+    });
+  }
 
   // Rounds you added yourself
   entry.manualRounds.forEach(function (round) {
@@ -448,8 +478,11 @@ function analyseAdmissions(uni, entry) {
   });
 
   // Auto-fill's deadline is the NEXT upcoming deadline. It's only the
-  // final deadline if no other round comes after it.
-  if (uni.deadline && !rounds.some(function (r) { return r.date === uni.deadline; })) {
+  // final deadline if no other round comes after it. (Skipped when it
+  // belongs to a campus you didn't choose.)
+  const deadlineIsOtherCampus = otherCampusDates.indexOf(uni.deadline) !== -1 &&
+    !rounds.some(function (r) { return r.date === uni.deadline; });
+  if (uni.deadline && !deadlineIsOtherCampus && !rounds.some(function (r) { return r.date === uni.deadline; })) {
     const isLast = !rounds.some(function (r) { return r.date > uni.deadline; });
     rounds.push({
       key: isLast ? "final" : "next",
@@ -490,6 +523,9 @@ function analyseAdmissions(uni, entry) {
 
   return {
     rounds: rounds,
+    roundsSource: roundsSource,
+    campuses: campuses,      // every campus found
+    campus: campus,          // the one you chose, or "all"
     multiRound: rounds.length > 1,
     type: type,
     typeSource: typeSource,
@@ -566,7 +602,7 @@ function recommendPlan(uni, entry, analysis) {
   } else if (target && analysis.type === "rounds") {
     // 2b. Several rounds: a week before the target round closes
     mode = "rounds";
-    source = chosen ? SOURCES.manual : typeSource;
+    source = chosen ? SOURCES.manual : (analysis.roundsSource === "admissionsRounds" ? SOURCES.rounds : typeSource);
     buffer = ROUND_BUFFER_DAYS;
     plannedDate = laterDate(ready, addDays(target.date, -buffer));
   } else if (target && analysis.type === "equalConsideration") {
@@ -642,6 +678,33 @@ function strategyNotes(uni, entry, analysis, plan) {
 
   const target = plan.target;
 
+  // Is this data for your start date? (getAcademicProfile is in script.js)
+  const intake = getAcademicProfile().intendedStartDate;
+  if (intake && uni.aiSearched) {
+    if (!uni.intake) {
+      notes.push({ type: "is-tight", icon: "circle-alert",
+        text: "These dates were found before you set your start date (" + intakeLabel(intake) +
+          "). Search again on the Universities tab to make sure they're for the right intake." });
+    } else if (uni.intake !== intake) {
+      notes.push({ type: "is-tight", icon: "circle-alert",
+        text: "These dates were found for " + intakeLabel(uni.intake) + " entry, but your start date is " +
+          intakeLabel(intake) + ". Search again on the Universities tab." });
+    }
+    const afterStart = analysis.rounds.find(function (r) { return r.date.slice(0, 7) >= intake && !r.manual; });
+    if (afterStart) {
+      notes.push({ type: "is-late", icon: "circle-alert",
+        text: afterStart.label + " (" + formatDate(afterStart.date) + ") is after your " + intakeLabel(intake) +
+          " start, so it's probably for a different intake. Check it on the university's website." });
+    }
+  }
+
+  // Several campuses, none chosen: say so
+  if (analysis.campus === "all" && analysis.campuses.length > 1) {
+    notes.push({ type: "is-tight", icon: "map-pin",
+      text: "Rounds differ by campus (" + analysis.campuses.join(", ") + "). The plan uses the earliest round across all of them. " +
+        "Choose your campus above for a plan that uses only its dates." });
+  }
+
   // Problems first
   if (analysis.rounds.length > 0 && !analysis.rounds.some(function (r) { return r.date >= todayText(); })) {
     notes.push({ type: "is-late", icon: "circle-alert",
@@ -684,7 +747,8 @@ function strategyNotes(uni, entry, analysis, plan) {
     const rec = plan.recommended;
     notes.push({ type: "is-good", icon: "target",
       text: "Earlier rounds usually have more places left. " + rec.label + " (" + shortDate(rec.date) +
-        ") is the earliest round you can be ready for." });
+        ") is the earliest round you can be ready for" +
+        (analysis.campus !== "all" ? " at the " + analysis.campus + " campus." : ".") });
     // An earlier round that's just out of reach: say so, it may be worth rushing
     const tooSoon = analysis.rounds.find(function (r) {
       return r.date >= todayText() && r.date < plan.ready && r.date < rec.date && !r.binding;
@@ -769,7 +833,8 @@ function buildCard(uni) {
   const titles = makeElement("div", "tl-titles");
   titles.append(
     makeElement("h3", "", uni.name),
-    makeElement("p", "muted", uni.course + " · " + uni.city + ", " + uni.country)
+    makeElement("p", "muted", uni.course + " · " + uni.city + ", " + uni.country +
+      (uni.intake ? " · For " + intakeLabel(uni.intake) + " entry" : ""))
   );
 
   const statusSelect = document.createElement("select");
@@ -848,13 +913,41 @@ function buildCard(uni) {
 
   const visualHolder = makeElement("div");     // the timeline bar
   const strategyHolder = makeElement("div");   // the strategy notes
-  left.append(dates, targetRow, roundsBox, visualHolder, strategyHolder);
+  // Campus dropdown: "All campuses", then every campus found in the rounds.
+  // Only shown when the rounds name at least one campus.
+  const campusRow = makeElement("div", "tl-campus-row");
+  const campusLabel = makeElement("label", "tl-date-label", "Campus");
+  campusLabel.htmlFor = idPrefix + "campus";
+  const campusSelect = document.createElement("select");
+  campusSelect.id = idPrefix + "campus";
+  campusSelect.className = "tl-campus-select";
+  campusSelect.addEventListener("change", function () {
+    entry.campus = campusSelect.value;
+    entry.targetRound = "auto";   // the old target may belong to another campus
+    drawRounds();
+    applyPlan();                  // recalculate with this campus's rounds
+    saveAndRefresh();
+  });
+  campusRow.append(campusLabel, campusSelect);
+
+  left.append(dates, campusRow, targetRow, roundsBox, visualHolder, strategyHolder);
 
   // Fill the dropdown and the rounds list (redrawn when rounds change)
   function drawRounds() {
     const analysis = analyseAdmissions(uni, entry);
     const plan = recommendPlan(uni, entry, analysis);
     const today = todayText();
+
+    // Campus dropdown
+    campusRow.hidden = analysis.campuses.length === 0;
+    campusSelect.innerHTML = "";
+    ["all"].concat(analysis.campuses).forEach(function (campus) {
+      const option = document.createElement("option");
+      option.value = campus;
+      option.textContent = campus === "all" ? "All campuses" : campus;
+      campusSelect.append(option);
+    });
+    campusSelect.value = analysis.campus;
 
     targetSelect.innerHTML = "";
     const autoOption = document.createElement("option");

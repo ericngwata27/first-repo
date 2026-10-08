@@ -2162,7 +2162,8 @@ textarea {
   flex-wrap: wrap;
 }
 
-.tl-target-select {
+.tl-target-select,
+.tl-campus-select {
   flex: 1;
   min-width: 0;
   font: 500 0.9rem var(--font-body);
@@ -2175,11 +2176,13 @@ textarea {
   transition: border-color var(--fast);
 }
 
-.tl-target-select:hover {
+.tl-target-select:hover,
+.tl-campus-select:hover {
   border-color: var(--line-strong);
 }
 
-.tl-target-select:focus {
+.tl-target-select:focus,
+.tl-campus-select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
@@ -2348,4 +2351,44 @@ textarea {
 
 .tl-track.has-labels-below {
   margin-bottom: 22px;
+}
+
+
+/* =========================================================
+   19. ACADEMIC PROFILE AND CAMPUSES (new)
+   ========================================================= */
+
+/* The four academic profile boxes on the Profile tab */
+.academic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+.academic-status {
+  grid-column: 1 / -1;
+}
+
+/* "Searching for September 2027 entry" under the form title */
+.search-for {
+  margin-top: 6px;
+}
+
+.search-for.is-warning,
+.academic-status.is-warning {
+  color: var(--amber);
+}
+
+/* Campus dropdown on Timeline cards */
+.tl-campus-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .academic-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -105,6 +105,8 @@
             <div>
               <h2 id="form-title">Add a university</h2>
               <p class="muted" id="form-subtitle">Type the university and course. We'll look up the rest.</p>
+              <!-- Which start date searches look for (set on the Profile tab) -->
+              <p class="muted small search-for" id="search-for"></p>
             </div>
           </div>
 
@@ -303,6 +305,52 @@
         <h2>My profile</h2>
         <p class="muted">Write things once, then copy them into any application. Everything saves automatically as you type.</p>
       </div>
+
+      <!-- ----- NEW Section: Your academic profile -----
+           Sent with every auto-fill search, so deadlines are for your start
+           date and entry requirements are in your school system.
+           It never decides your campus: you choose that on each Timeline card. -->
+      <section class="profile-section" id="academic-profile">
+        <div class="section-heading">
+          <h3>Your academic profile</h3>
+          <p class="muted">Used by auto-fill to find the right admissions cycle and the grades for your school system. Saved automatically.</p>
+        </div>
+
+        <div class="card academic-grid">
+          <div class="field">
+            <label for="profile-start"><i data-lucide="calendar"></i> Intended start date</label>
+            <input id="profile-start" type="month">
+          </div>
+          <div class="field">
+            <label for="profile-grade"><i data-lucide="graduation-cap"></i> Current grade level</label>
+            <input id="profile-grade" type="text" list="grade-options" placeholder="e.g. Year 12 / Grade 11" autocomplete="off">
+            <datalist id="grade-options">
+              <option value="Year 12 (Grade 11)">
+              <option value="Year 13 (Grade 12)">
+              <option value="Gap year">
+              <option value="Finished school">
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="profile-system"><i data-lucide="book-open"></i> School system</label>
+            <input id="profile-system" type="text" list="system-options" placeholder="e.g. IB, A-levels, Abitur" autocomplete="off">
+            <datalist id="system-options">
+              <option value="IB Diploma">
+              <option value="A-levels">
+              <option value="Abitur">
+              <option value="AP (US high school diploma)">
+              <option value="French Baccalauréat">
+              <option value="Matura">
+              <option value="Scottish Highers">
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="profile-country"><i data-lucide="globe"></i> Country of residence</label>
+            <input id="profile-country" type="text" placeholder="e.g. Germany" autocomplete="country-name">
+          </div>
+          <p class="muted small academic-status" id="academic-status"></p>
+        </div>
+      </section>
 
       <!-- ----- Section: About me ----- -->
       <section class="profile-section">
