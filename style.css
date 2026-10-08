@@ -1380,3 +1380,116 @@ textarea {
     max-width: none;
   }
 }
+
+
+/* =========================================================
+   15. NEON THEME
+   Everything above is the normal dark theme. This section
+   changes it to a neon look by:
+     - replacing the blue accent with electric cyan
+     - making the deadline colors neon (green, yellow, pink)
+     - adding soft glows around buttons, pins and cards
+   Delete this whole section to go back to the normal dark theme.
+   ========================================================= */
+:root {
+  --bg: #07080d;          /* even darker, so neon colors pop */
+  --surface: #0f111a;
+  --surface-2: #161927;
+  --line: #222639;
+  --line-strong: #343a55;
+
+  --accent: #00e5ff;               /* electric cyan */
+  --accent-hover: #6ef3ff;
+  --accent-text: #5cefff;
+  --accent-soft: rgba(0, 229, 255, 0.12);
+  --on-accent: #03141a;            /* dark text on cyan buttons, for good contrast */
+
+  --green: #2dffa0;
+  --green-soft: rgba(45, 255, 160, 0.12);
+  --amber: #ffd23f;
+  --amber-soft: rgba(255, 210, 63, 0.12);
+  --red: #ff3d8b;                  /* hot pink instead of red */
+  --red-soft: rgba(255, 61, 139, 0.13);
+
+  --glass: rgba(15, 17, 26, 0.85);
+
+  /* A reusable glow: a blurred shadow in the accent color */
+  --glow: 0 0 18px rgba(0, 229, 255, 0.45);
+}
+
+/* Cyan buttons need dark text to be readable */
+.button-primary,
+.logo-mark {
+  color: var(--on-accent);
+}
+
+.button-primary {
+  box-shadow: var(--glow);
+}
+
+.button-primary:hover {
+  box-shadow: 0 0 28px rgba(0, 229, 255, 0.65);
+}
+
+.logo-mark {
+  box-shadow: var(--glow);
+}
+
+/* The active tab glows */
+.tab.is-active {
+  color: var(--accent-text);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+}
+
+/* Cards light up with a cyan edge when you hover over them */
+.uni-card:hover,
+.card:hover {
+  border-color: rgba(0, 229, 255, 0.35);
+}
+
+.uni-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--glow);
+}
+
+/* The colored strip on each list card glows in its own color */
+.uni-card::before {
+  box-shadow: 0 0 12px var(--strip-color);
+}
+
+/* Pins glow in their deadline color */
+.pin {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 16px var(--pin-color), 0 3px 10px rgba(0, 0, 0, 0.6);
+}
+
+.pin svg {
+  color: #07080d; /* dark cap icon on the bright pin */
+}
+
+.pin.is-selected {
+  box-shadow: 0 0 0 5px rgba(0, 229, 255, 0.35), 0 0 26px var(--pin-color);
+}
+
+/* Glowing dots in the chips and the legend */
+.chip::before,
+.dot {
+  box-shadow: 0 0 8px currentColor;
+}
+
+.dot-later  { color: var(--green); }
+.dot-soon   { color: var(--amber); }
+.dot-urgent { color: var(--red); }
+.dot-none   { color: var(--gray); }
+
+/* Text boxes glow cyan while you type in them */
+input:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--glow);
+}
+
+/* The personal statement bar glows too */
+.meter-fill {
+  box-shadow: 0 0 10px currentColor;
+  color: var(--accent);
+}
