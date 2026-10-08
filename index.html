@@ -93,21 +93,48 @@
       <!-- ----- Form on the left, list on the right ----- -->
       <div class="work-area">
 
-        <!-- ===== Add / edit form ===== -->
+        <!-- ===== Add / edit form =====
+             NEW: you only type the university and course. Pressing
+             "Find details" searches online and fills in everything else. -->
         <section class="card form-card" id="form-card">
           <div class="card-header">
             <div>
               <h2 id="form-title">Add a university</h2>
-              <p class="muted" id="form-subtitle">We'll find it on the map for you.</p>
+              <p class="muted" id="form-subtitle">Type the university and course. We'll look up the rest.</p>
             </div>
           </div>
+
+          <!-- Auto-fill settings: where you paste your Claude API key (optional) -->
+          <details class="ai-settings" id="ai-settings">
+            <summary>
+              <i data-lucide="sparkles"></i>
+              <span>Auto-fill settings</span>
+              <span class="ai-state" id="ai-state">AI search off</span>
+            </summary>
+            <div class="ai-settings-body">
+              <p class="muted">
+                Without a key, we look up the location, official website and a short description from Wikidata and Wikipedia (free).
+                Add a Claude API key to also search the university's official website for deadlines, entry requirements and course details.
+                Each search costs roughly 10 to 25 US cents, billed to your Anthropic account.
+              </p>
+              <div class="field">
+                <label for="api-key"><i data-lucide="key-round"></i> Claude API key</label>
+                <input id="api-key" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+              </div>
+              <p class="muted small">Get one at console.anthropic.com. It's saved only in this browser and only ever sent to Anthropic.</p>
+              <div class="form-actions">
+                <button type="button" class="button button-small" id="save-key">Save key</button>
+                <button type="button" class="button button-small button-danger" id="remove-key">Remove key</button>
+              </div>
+            </div>
+          </details>
 
           <!-- novalidate turns off the browser's own pop-ups so we can show nicer messages -->
           <form id="uni-form" novalidate>
 
-            <!-- Group 1: the basics -->
+            <!-- Step 1: the only two things you type -->
             <fieldset>
-              <legend>The basics</legend>
+              <legend>What are you looking for?</legend>
 
               <div class="field">
                 <label for="name"><i data-lucide="building-2"></i> University name <span class="required">*</span></label>
@@ -122,65 +149,84 @@
               </div>
             </fieldset>
 
-            <!-- Group 2: where it is -->
-            <fieldset>
-              <legend>Location</legend>
-              <div class="field-row">
-                <div class="field">
-                  <label for="city"><i data-lucide="map-pin"></i> City <span class="required">*</span></label>
-                  <input id="city" type="text" placeholder="e.g. Edinburgh" autocomplete="off">
-                  <p class="field-error" id="city-error"></p>
+            <!-- Loading animation and result label. script.js fills this in. -->
+            <div id="lookup-status" class="lookup-status" hidden></div>
+
+            <!-- Step 2: everything below is filled in automatically.
+                 It stays hidden until a search has run. You can still
+                 correct anything that looks wrong. -->
+            <div id="found-section" class="found-section" hidden>
+              <fieldset>
+                <legend>Found automatically <span class="legend-hint">· you can still edit</span></legend>
+
+                <div class="field-row">
+                  <div class="field">
+                    <label for="city"><i data-lucide="map-pin"></i> City</label>
+                    <input id="city" type="text" autocomplete="off">
+                    <p class="field-error" id="city-error"></p>
+                  </div>
+                  <div class="field">
+                    <label for="country"><i data-lucide="globe"></i> Country</label>
+                    <input id="country" type="text" autocomplete="off">
+                    <p class="field-error" id="country-error"></p>
+                  </div>
                 </div>
+
                 <div class="field">
-                  <label for="country"><i data-lucide="globe"></i> Country <span class="required">*</span></label>
-                  <input id="country" type="text" placeholder="e.g. United Kingdom" autocomplete="off">
-                  <p class="field-error" id="country-error"></p>
+                  <label for="deadline"><i data-lucide="calendar"></i> Application deadline</label>
+                  <input id="deadline" type="date">
+                  <p class="field-error" id="deadline-error"></p>
                 </div>
-              </div>
-            </fieldset>
 
-            <!-- Group 3: applying -->
-            <fieldset>
-              <legend>Applying</legend>
-
-              <div class="field">
-                <label for="deadline"><i data-lucide="calendar"></i> Application deadline</label>
-                <input id="deadline" type="date">
-                <p class="field-error" id="deadline-error"></p>
-              </div>
-
-              <div class="field">
-                <label for="requirements"><i data-lucide="award"></i> Entry requirements</label>
-                <textarea id="requirements" rows="2" placeholder="e.g. AAA at A-level including Maths, or IB 38 points"></textarea>
-              </div>
-
-              <div class="field">
-                <label for="application-info"><i data-lucide="file-text"></i> How to apply</label>
-                <textarea id="application-info" rows="2" placeholder="e.g. Apply through UCAS. Needs a personal statement and one reference."></textarea>
-              </div>
-            </fieldset>
-
-            <!-- Group 4: your opinion -->
-            <fieldset>
-              <legend>Your thoughts</legend>
-              <div class="field-row">
                 <div class="field">
-                  <label for="pros"><i data-lucide="thumbs-up"></i> Pros</label>
-                  <textarea id="pros" rows="3" placeholder="One per line"></textarea>
+                  <label for="requirements"><i data-lucide="award"></i> Entry requirements</label>
+                  <textarea id="requirements" rows="2"></textarea>
                 </div>
-                <div class="field">
-                  <label for="cons"><i data-lucide="thumbs-down"></i> Cons</label>
-                  <textarea id="cons" rows="3" placeholder="One per line"></textarea>
-                </div>
-              </div>
-            </fieldset>
 
-            <!-- Messages like "Finding Edinburgh on the map..." appear here -->
+                <div class="field">
+                  <label for="application-info"><i data-lucide="file-text"></i> How to apply</label>
+                  <textarea id="application-info" rows="2"></textarea>
+                </div>
+
+                <div class="field">
+                  <label for="course-description"><i data-lucide="book-open"></i> Course description</label>
+                  <textarea id="course-description" rows="3"></textarea>
+                </div>
+
+                <div class="field">
+                  <label for="notes"><i data-lucide="lightbulb"></i> Important notes</label>
+                  <textarea id="notes" rows="2"></textarea>
+                </div>
+              </fieldset>
+
+              <!-- Your own opinions can't be looked up, so they're optional and folded away -->
+              <details class="thoughts">
+                <summary><i data-lucide="thumbs-up"></i> Add your own pros and cons (optional)</summary>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="pros">Pros</label>
+                    <textarea id="pros" rows="3" placeholder="One per line"></textarea>
+                  </div>
+                  <div class="field">
+                    <label for="cons">Cons</label>
+                    <textarea id="cons" rows="3" placeholder="One per line"></textarea>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <!-- Error messages appear here -->
             <p id="form-message" class="form-message" role="status"></p>
 
             <div class="form-actions">
+              <!-- One main button: "Find details" first, then "Add to map" -->
               <button type="submit" id="submit-button" class="button button-primary">
-                <i data-lucide="plus"></i> <span id="submit-label">Add to map</span>
+                <span id="submit-icon"><i data-lucide="search"></i></span>
+                <span id="submit-label">Find details</span>
+              </button>
+              <!-- Runs the search again (shown after a search, or while editing) -->
+              <button type="button" id="search-again" class="button" hidden>
+                <i data-lucide="refresh-cw"></i> Search again
               </button>
               <!-- Only shown while editing -->
               <button type="button" id="cancel-edit" class="button" hidden>Cancel</button>
