@@ -35,10 +35,14 @@
 
       <!-- The tabs. data-tab says which section each one opens. -->
       <nav class="tabs" aria-label="Sections">
-        <button class="tab is-active" data-tab="universities-tab">
+        <button class="tab is-active" data-tab="universities-tab" aria-selected="true">
           <i data-lucide="map"></i> Universities
         </button>
-        <button class="tab" data-tab="profile-tab">
+        <!-- NEW: Application Timeline page -->
+        <button class="tab" data-tab="timeline-tab" aria-selected="false">
+          <i data-lucide="calendar-check"></i> Timeline
+        </button>
+        <button class="tab" data-tab="profile-tab" aria-selected="false">
           <i data-lucide="user"></i> Profile
         </button>
       </nav>
@@ -259,7 +263,38 @@
     </section>
 
     <!-- =========================================================
-         TAB 2: PROFILE
+         TAB 2: APPLICATION TIMELINE (new)
+         timeline.js builds one card per saved university inside
+         #timeline-list. Everything here is saved automatically.
+         ========================================================= -->
+    <section id="timeline-tab" class="tab-content" hidden>
+
+      <div class="timeline-intro">
+        <div>
+          <h2>Application timeline</h2>
+          <p class="muted">Plan when you'll submit, tick off each step, and add the dates to your calendar.</p>
+        </div>
+        <button type="button" class="button" id="export-all-ics">
+          <i data-lucide="calendar-plus"></i> Export all to calendar
+        </button>
+      </div>
+
+      <!-- Summary: how many at each status, and the next thing to do -->
+      <div class="timeline-summary" id="timeline-summary"></div>
+
+      <!-- One card per university (filled in by timeline.js) -->
+      <div class="timeline-list" id="timeline-list"></div>
+
+      <!-- Shown when no universities are saved yet -->
+      <div id="timeline-empty" class="empty-state" hidden>
+        <span class="empty-icon"><i data-lucide="calendar-check"></i></span>
+        <h3>No universities yet</h3>
+        <p>Add universities on the Universities tab, and they'll appear here with their deadlines.</p>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         TAB 3: PROFILE
          Every text box has data-key: the name it's saved under.
          ========================================================= -->
     <section id="profile-tab" class="tab-content" hidden>
@@ -369,5 +404,7 @@
 
   <!-- Our own code -->
   <script src="script.js"></script>
+  <!-- NEW: the Application Timeline page (uses helpers from script.js, so it loads after it) -->
+  <script src="timeline.js"></script>
 </body>
 </html>

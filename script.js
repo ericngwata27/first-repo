@@ -21,31 +21,85 @@
 
 
 // =========================================================
-// 1. SAVING AND LOADING
-// localStorage is a small storage space in your browser that
-// keeps data after you close the page. It only stores text,
-// so we convert with JSON.stringify (data -> text) and
-// JSON.parse (text -> data).
+// 1. SAVING AND LOADING (the "data store")
+//
+// EVERY read and write of saved data goes through DataStore.
+// Right now it uses localStorage, a small storage space in your
+// browser that keeps data after you close the page.
+//
+// BACKEND: when your server is ready, this is the only place
+// that needs to change. Replace the insides of these functions
+// with fetch() calls to your server, and the rest of the site
+// keeps working as before.
 // =========================================================
 
-const STORAGE_KEY = "future-planner-universities";
+// The names everything is saved under, in one place
+const STORAGE_KEYS = {
+  universities: "future-planner-universities",
+  timeline: "future-planner-timeline",
+  searchCache: "future-planner-search-cache",
+  apiKey: "future-planner-claude-key",
+  profilePrefix: "future-planner-profile-",  // + "personal", "statement", ...
+};
+
+const DataStore = {
+  // Read data saved as JSON (lists and objects). Returns `fallback` if
+  // nothing is saved, or if the browser blocks storage (private mode).
+  read: function (key, fallback) {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : fallback;
+    } catch (error) {
+      return fallback;
+    }
+  },
+
+  // Save data as JSON. Returns true if it worked.
+  write: function (key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (error) {
+      return false; // storage full or blocked: the page still works
+    }
+  },
+
+  // Read and save plain text (profile notes and the API key)
+  readText: function (key) {
+    try {
+      return localStorage.getItem(key) || "";
+    } catch (error) {
+      return "";
+    }
+  },
+
+  writeText: function (key, text) {
+    try {
+      localStorage.setItem(key, text);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  remove: function (key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      // nothing to remove
+    }
+  },
+};
 
 function loadUniversities() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch (error) {
-    return []; // if anything goes wrong, start with an empty list
-  }
+  return DataStore.read(STORAGE_KEYS.universities, []);
 }
 
 function saveUniversities() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(universities));
-  } catch (error) {
-    // Some browsers block storage (for example in private mode).
-    // The page still works, it just won't remember things.
-  }
+  DataStore.write(STORAGE_KEYS.universities, universities);
+
+  // Tell other pages (like the Application Timeline) that the list changed
+  document.dispatchEvent(new CustomEvent("universities-changed"));
 }
 
 // Our main data: a list of university objects. One looks like this:
@@ -176,11 +230,13 @@ const tabButtons = document.querySelectorAll(".tab");
 
 tabButtons.forEach(function (button) {
   button.addEventListener("click", function () {
-    // Highlight only the clicked tab
+    // Highlight only the clicked tab (aria-selected tells screen readers)
     tabButtons.forEach(function (b) {
       b.classList.remove("is-active");
+      b.setAttribute("aria-selected", "false");
     });
     button.classList.add("is-active");
+    button.setAttribute("aria-selected", "true");
 
     // Hide every section, then show the one this tab points to
     document.querySelectorAll(".tab-content").forEach(function (section) {
@@ -190,6 +246,9 @@ tabButtons.forEach(function (button) {
 
     // A map that was hidden doesn't know its size, so we ask it to re-measure
     if (map) map.invalidateSize();
+
+    // Let other pages know which tab opened (the Timeline refreshes itself)
+    document.dispatchEvent(new CustomEvent("tab-opened", { detail: button.dataset.tab }));
   });
 });
 
@@ -351,15 +410,10 @@ async function findCoordinates(name, city, country) {
 // gets the "Verified from official sources" label.
 // =========================================================
 
-const API_KEY_STORAGE = "future-planner-claude-key";
 const CLAUDE_MODEL = "claude-opus-5-5";
 
 function getApiKey() {
-  try {
-    return localStorage.getItem(API_KEY_STORAGE) || "";
-  } catch (error) {
-    return "";
-  }
+  return DataStore.readText(STORAGE_KEYS.apiKey);
 }
 
 // "https://www.ed.ac.uk/study" -> "ed.ac.uk"
@@ -866,7 +920,6 @@ function showLookupResult(result, errorText, cachedAt) {
 // browser for 7 days. Looking up the same university and course again
 // then costs nothing. "Search again" always does a fresh search.
 
-const SEARCH_CACHE_KEY = "future-planner-search-cache";
 const CACHE_DAYS = 7;
 
 function searchCacheKey(name, course) {
@@ -874,11 +927,7 @@ function searchCacheKey(name, course) {
 }
 
 function loadSearchCache() {
-  try {
-    return JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY)) || {};
-  } catch (error) {
-    return {};
-  }
+  return DataStore.read(STORAGE_KEYS.searchCache, {});
 }
 
 // Returns a remembered search, or null if there isn't a usable one
@@ -906,11 +955,8 @@ function saveCachedSearch(key, entry) {
     delete cache[oldKey];
   });
 
-  try {
-    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(cache));
-  } catch (error) {
-    // storage full or blocked: the search still works, it just isn't remembered
-  }
+  // (if storage is full or blocked, the search still works, it just isn't remembered)
+  DataStore.write(STORAGE_KEYS.searchCache, cache);
 }
 
 // ----- Running a search -----
@@ -1243,9 +1289,7 @@ document.getElementById("save-key").addEventListener("click", function () {
     showToast("That doesn't look like a Claude API key. It should start with sk-ant-", "circle-alert");
     return;
   }
-  try {
-    localStorage.setItem(API_KEY_STORAGE, key);
-  } catch (error) {
+  if (!DataStore.writeText(STORAGE_KEYS.apiKey, key)) {
     showToast("Your browser blocked saving the key.", "circle-alert");
     return;
   }
@@ -1254,11 +1298,7 @@ document.getElementById("save-key").addEventListener("click", function () {
 });
 
 document.getElementById("remove-key").addEventListener("click", function () {
-  try {
-    localStorage.removeItem(API_KEY_STORAGE);
-  } catch (error) {
-    // nothing to remove
-  }
+  DataStore.remove(STORAGE_KEYS.apiKey);
   updateAiState();
   showToast("API key removed. AI search is off.", "trash-2");
 });
@@ -1642,23 +1682,15 @@ function updateProfileStatus(textarea, justSaved) {
 }
 
 document.querySelectorAll(".profile-field").forEach(function (textarea) {
-  const storageKey = "future-planner-profile-" + textarea.dataset.key;
+  const storageKey = STORAGE_KEYS.profilePrefix + textarea.dataset.key;
 
   // Load what was saved before
-  try {
-    textarea.value = localStorage.getItem(storageKey) || "";
-  } catch (error) {
-    // storage blocked: start empty
-  }
+  textarea.value = DataStore.readText(storageKey);
   updateProfileStatus(textarea, false);
 
   // Save on every change
   textarea.addEventListener("input", function () {
-    try {
-      localStorage.setItem(storageKey, textarea.value);
-    } catch (error) {
-      // storage blocked: nothing we can do
-    }
+    DataStore.writeText(storageKey, textarea.value);
     updateProfileStatus(textarea, true);
   });
 });

@@ -1353,6 +1353,11 @@ textarea {
   .tab {
     flex: 1;
     justify-content: center;
+    /* three tabs must fit on a phone, so they get a little tighter */
+    gap: 6px;
+    padding: 8px 6px;
+    font-size: 0.86rem;
+    min-width: 0;
   }
 
   .stats {
@@ -1646,4 +1651,459 @@ textarea {
 .verified-mark .lucide {
   width: 15px;
   height: 15px;
+}
+
+
+/* =========================================================
+   16. APPLICATION TIMELINE (new)
+   The Timeline tab: summary, timeline cards, the mini timeline
+   bar and the milestone checklist. Uses the same color tokens
+   as the rest of the site.
+   ========================================================= */
+
+/* ----- Status colors (used by cards, dropdowns and counts) ----- */
+.status-researching { --status-color: var(--gray);        --status-soft: var(--gray-soft); }
+.status-applying    { --status-color: var(--accent-text); --status-soft: var(--accent-soft); }
+.status-submitted   { --status-color: var(--amber);       --status-soft: var(--amber-soft); }
+.status-offer       { --status-color: var(--green);       --status-soft: var(--green-soft); }
+.status-rejected    { --status-color: var(--red);         --status-soft: var(--red-soft); }
+
+/* ----- Page header and summary ----- */
+.timeline-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.timeline-intro h2 {
+  font-size: 1.7rem;
+  margin-bottom: 6px;
+}
+
+.timeline-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+}
+
+.timeline-summary:empty {
+  display: none;
+}
+
+.tl-status-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tl-count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--status-soft);
+  color: var(--status-color);
+}
+
+.tl-next {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+
+.tl-next .lucide {
+  color: var(--accent-text);
+}
+
+.tl-overdue-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* ----- Cards ----- */
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tl-card {
+  position: relative;
+  overflow: hidden;
+  padding: 22px 24px;
+  animation: fade-up var(--medium) ease both;
+}
+
+/* Colored strip on the left showing the status */
+.tl-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--status-color, var(--gray));
+}
+
+.tl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.tl-titles {
+  min-width: 0;
+}
+
+.tl-titles h3 {
+  font-size: 1.15rem;
+  margin-bottom: 2px;
+}
+
+/* The status dropdown looks like a colored pill */
+.status-select {
+  appearance: none;
+  font: 600 0.85rem var(--font-body);
+  color: var(--status-color, var(--ink));
+  background: var(--status-soft, var(--surface-2))
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a5adbf' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 30px 6px 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--fast);
+}
+
+.status-select:hover {
+  border-color: var(--line-strong);
+}
+
+.status-select:focus-visible {
+  outline: 3px solid rgba(147, 166, 255, 0.45);
+  outline-offset: 2px;
+}
+
+/* Inside a card, the dropdown takes the card's status color */
+.tl-card .status-select {
+  color: var(--status-color);
+  background-color: var(--status-soft);
+}
+
+.status-select option {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+/* Two columns: dates and timeline on the left, milestones on the right */
+.tl-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+}
+
+.tl-left,
+.tl-right {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ----- The two date boxes ----- */
+.tl-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.tl-date-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.tl-date-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.tl-date-value {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.tl-date-value.is-empty {
+  color: var(--amber);
+  font-style: italic;
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+.tl-date-note {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.tl-date-box input[type="date"] {
+  padding: 6px 10px;
+  background: var(--surface);
+}
+
+/* ----- The mini timeline bar ----- */
+.tl-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tl-track {
+  position: relative;
+  height: 8px;
+  margin: 8px 7px 0;  /* room for the dots at the very ends */
+  border-radius: 999px;
+  background: var(--line);
+}
+
+/* Time that has already passed */
+.tl-elapsed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+/* Buffer between planned date and deadline */
+.tl-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--green);
+  opacity: 0.6;
+}
+
+.tl-segment.is-late {
+  background: var(--red);
+}
+
+/* Dots on the line */
+.tl-marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  transform: translate(-50%, -50%);
+  background: var(--marker-color);
+}
+
+.tl-marker-today    { --marker-color: var(--ink); }
+.tl-marker-planned  { --marker-color: var(--accent); }
+.tl-marker-deadline { --marker-color: var(--red); }
+
+.tl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-legend-item strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--marker-color);
+  display: inline-block;
+}
+
+.tl-message {
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+
+.tl-message.is-good  { color: var(--green); }
+.tl-message.is-tight { color: var(--amber); }
+.tl-message.is-late  { color: var(--red); }
+
+/* ----- Milestone checklist ----- */
+.tl-milestone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.tl-milestone-header .eyebrow {
+  margin: 0;
+}
+
+.tl-progress-text {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-milestones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-milestone {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  transition: background var(--fast);
+}
+
+.tl-milestone:hover {
+  background: var(--surface-2);
+}
+
+.tl-milestone input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+.tl-milestone-label {
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color var(--fast);
+}
+
+/* Small date boxes next to each step */
+.tl-milestone-date {
+  width: auto;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 7px;
+  color: var(--ink-2);
+}
+
+/* Finished steps are crossed out and faded */
+.tl-milestone.is-done .tl-milestone-label {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+.tl-milestone.is-done .tl-milestone-date {
+  opacity: 0.5;
+}
+
+/* Steps whose date has passed without being ticked off */
+.tl-milestone.is-overdue .tl-milestone-label {
+  color: var(--red);
+}
+
+.tl-milestone.is-overdue .tl-milestone-date {
+  border-color: rgba(243, 100, 107, 0.5);
+}
+
+/* The progress bar reuses .meter from the Profile tab, in green */
+.tl-right .meter-fill {
+  background: var(--green);
+}
+
+/* ----- Card buttons ----- */
+.tl-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* ----- Smaller screens ----- */
+@media (max-width: 960px) {
+  .tl-body {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}
+
+@media (max-width: 600px) {
+  .tl-card {
+    padding: 18px;
+  }
+
+  .tl-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tl-dates {
+    grid-template-columns: 1fr;
+  }
+
+  .tl-footer {
+    justify-content: stretch;
+  }
+
+  .tl-footer .button {
+    flex: 1;
+  }
+
+  .timeline-intro .button {
+    width: 100%;
+  }
+
+  /* keep the flag icon next to its text */
+  .tl-next {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
 }
