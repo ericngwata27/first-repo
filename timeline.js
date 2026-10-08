@@ -10,7 +10,7 @@
 //   1. Settings (milestones, statuses, rounds and signals)
 //   2. Saving and loading timeline data
 //   3. Date helpers
-//   4. Reading admissions patterns from the auto-fill text
+//   4. Reading admissions information (structured fields first, then text)
 //   5. Working out the best time to apply
 //   6. Timeline cards
 //   7. The mini timeline bar and strategy notes
@@ -65,28 +65,43 @@ const ROUND_TYPES = [
   { pattern: /\b(?:round|stage|phase)\s*(?:4|four|iv)\b/gi, label: "Round 4", short: "R4" },
 ];
 
-// Phrases that mean applications are reviewed as they arrive
+// ----- Phrases we look for when auto-fill didn't give a structured answer -----
+// (Universities saved before the structured fields existed, or searches
+// where Claude answered "unknown", fall back to reading the text.)
+
+// Applications are reviewed as they arrive
 const ROLLING_SIGNALS = [
   /rolling (?:admissions?|basis|deadline|review)/i,
   /first[- ]come,? first[- ]served/i,
   /reviewed (?:as|when) (?:they|applications) (?:arrive|are received)/i,
   /as (?:soon as )?(?:they|applications) (?:are|is) received/i,
-  /until (?:all )?(?:places|seats|spaces) (?:are|have been) (?:filled|taken)/i,
+  /until (?:all )?(?:available )?(?:places|seats|spaces) (?:are|have been) (?:filled|taken)/i,
 ];
 
-// Phrases that mean places are limited or early applicants get priority
+// The university advises applying early
+const EARLY_SIGNALS = [
+  /(?:places|seats|spaces) (?:fill|are filled|get filled) up/i,
+  /fill(?:s|ed)? up (?:quickly|fast|progressively)/i,
+  /apply(?:ing)? early/i,
+  /as early as possible/i,
+  /progressively/i,
+  /early (?:application|applying) is (?:advised|recommended|encouraged)/i,
+];
+
+// Places are limited or early applicants get priority
 const CAPACITY_SIGNALS = [
   /limited (?:seats|places|spaces|capacity|number of places)/i,
   /(?:places|seats|spaces) (?:are )?limited/i,
   /capacity (?:constraints?|limits?)/i,
   /high[- ]demand/i,
   /oversubscribed/i,
+  /priority applicants?/i,
   /priority (?:is )?(?:given )?to early/i,
   /early applicants?/i,
   /(?:may|might|can|could) close (?:early|before)/i,
 ];
 
-// Phrases that suggest a competitive course (worth a longer safety buffer)
+// A competitive course (worth a longer safety buffer)
 const COMPETITIVE_SIGNALS = [
   /highly competitive/i,
   /competitive (?:course|programme|program|entry|admission)/i,
@@ -106,6 +121,15 @@ const BUFFER_DAYS = { normal: 21, competitive: 45 };
 
 // How many days before a round's deadline to aim for
 const ROUND_BUFFER_DAYS = 7;
+
+// Where a recommendation came from (shown under every recommendation)
+const SOURCES = {
+  window: "Based on recommendedWindow",
+  type: "Based on admissionsType",
+  competitive: "Based on competitiveness signals",
+  fallback: "Based on fallback text detection",
+  manual: "Based on the round you chose",
+};
 
 
 // =========================================================
@@ -242,56 +266,36 @@ function isDateText(value) {
 
 
 // =========================================================
-// 4. READING ADMISSIONS PATTERNS FROM THE AUTO-FILL TEXT
+// 4. READING ADMISSIONS INFORMATION
 //
-// Auto-fill saves one deadline plus some text (notes, how to apply,
-// entry requirements, course description). We read that text, without
-// changing it, looking for admission rounds, rolling admissions,
-// limited places and signs of a competitive course.
+// First choice: the structured fields auto-fill now saves
+//   admissionsType     "rolling", "rounds", "singleDeadline",
+//                      "equalConsideration" or "unknown"
+//   admissionsRounds   [{ label: "Round 1", date: "2026-11-15" }, ...]
+//   recommendedWindow  the university's own advice, e.g.
+//                      "Apply October-December because spaces fill progressively"
+//
+// Fallback (universities saved before these fields existed, or when
+// Claude answered "unknown"): read the saved text for the same clues.
+// Nothing here changes the saved university data.
 // =========================================================
 
-const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const MONTH_PATTERN = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-// Read a date from text like "15 November 2026", "Nov 15" or "15th of January".
-// Dates without a year get the next time that day comes round.
+// Read a round's date (parseLooseDate is in script.js and also
+// understands dates without a year, like "15 November")
 function readRoundDate(text) {
-  const fullDate = parseDeadline(text);   // from script.js: dates with a year
-  if (fullDate) return fullDate;
-
-  const monthNumber = function (word) {
-    const index = MONTHS.indexOf(word.slice(0, 3).toLowerCase());
-    return index === -1 ? 0 : index + 1;
-  };
-
-  let day = 0;
-  let month = 0;
-  let match = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,})/);
-  if (match && monthNumber(match[2])) {
-    day = Number(match[1]);
-    month = monthNumber(match[2]);
-  } else {
-    match = text.match(/\b([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
-    if (match && monthNumber(match[1])) {
-      day = Number(match[2]);
-      month = monthNumber(match[1]);
-    }
-  }
-  if (!day || day > 31) return "";
-
-  // No year given: use this year, or next year if that date has passed
-  const today = new Date();
-  let date = new Date(today.getFullYear(), month - 1, day);
-  if (toDateText(date) < todayText()) date = new Date(today.getFullYear() + 1, month - 1, day);
-  return toDateText(date);
+  return parseLooseDate(text);
 }
 
 // All the auto-fill text for a university, in one string
 function autoFillText(uni) {
-  return [uni.notes, uni.applicationInfo, uni.requirements, uni.courseDescription]
+  return [uni.notes, uni.applicationInfo, uni.requirements, uni.courseDescription, uni.recommendedWindow]
     .filter(Boolean).join("\n");
 }
 
-// Find admission rounds and their dates, e.g. "Round 1 closes 15 November"
+// FALLBACK: find rounds and their dates in text, e.g. "Round 1 closes 15 November"
 function detectRounds(text) {
   // 1. Find every round name in the text
   let found = [];
@@ -328,10 +332,92 @@ function detectRounds(text) {
       short: item.type.short,
       date: date,
       binding: Boolean(item.type.binding),
-      source: "auto-fill",
+      source: "auto-fill text",
     });
   });
   return rounds;
+}
+
+// STRUCTURED: turn auto-fill's admissionsRounds into timeline rounds
+function structuredRounds(list) {
+  const rounds = [];
+  list.forEach(function (item) {
+    if (!item || !isDateText(item.date)) return;
+    const label = String(item.label || "Round").slice(0, 40);
+    const short = shortRoundName(label);
+    let key = short.toLowerCase();
+    // Two rounds with the same short name get a number added ("r", "r-2")
+    let n = 2;
+    while (rounds.some(function (r) { return r.key === key; })) key = short.toLowerCase() + "-" + n++;
+    rounds.push({ key: key, label: label, short: short, date: item.date,
+      binding: /early decision/i.test(label), source: "auto-fill" });
+  });
+  return rounds;
+}
+
+// Read the recommended window into dates, e.g.
+//   "Apply October-December"       -> 1 Oct to 31 Dec (next time round)
+//   "between 1 November and 15 Jan" -> 1 Nov to 15 Jan
+//   "by 15 December"               -> today to 15 Dec
+// Returns null if no months are mentioned.
+function parseWindow(text) {
+  if (!text) return null;
+  const tokenPattern = new RegExp(
+    "(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?" + MONTH_PATTERN + "\\b(?:,?\\s+(\\d{4}))?" +   // 15 November (2026)
+    "|" + MONTH_PATTERN + "\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?:,?\\s+(\\d{4}))?" +             // November 15 (2026)
+    "|" + MONTH_PATTERN + "\\b(?:\\s+(\\d{4}))?", "gi");                                       // November (2026)
+
+  const tokens = [];
+  let match;
+  while ((match = tokenPattern.exec(text)) !== null) {
+    let day = 0, monthWord = "", year = 0;
+    if (match[2]) { day = Number(match[1]); monthWord = match[2]; year = Number(match[3]) || 0; }
+    else if (match[4]) { monthWord = match[4]; day = Number(match[5]); year = Number(match[6]) || 0; }
+    else { monthWord = match[7]; year = Number(match[8]) || 0; }
+
+    // "may" is usually the verb ("you may apply") unless a day or year is next to it
+    if (/^may$/i.test(monthWord) && !day && !year) continue;
+    tokens.push({ day: day, month: MONTH_KEYS.indexOf(monthWord.slice(0, 3).toLowerCase()) + 1, year: year });
+  }
+  // No months? Try seasons (northern hemisphere): "apply in autumn"
+  if (tokens.length === 0) {
+    const seasons = { autumn: [9, 11], fall: [9, 11], winter: [12, 2], spring: [3, 5], summer: [6, 8] };
+    const season = (text.match(/\b(autumn|fall|winter|spring|summer)\b/i) || [])[1];
+    if (!season) return null;
+    const months = seasons[season.toLowerCase()];
+    tokens.push({ day: 0, month: months[0], year: 0 }, { day: 0, month: months[1], year: 0 });
+  }
+
+  const today = todayText();
+  const pad = function (n) { return String(n).padStart(2, "0"); };
+  const lastDay = function (year, month) { return new Date(year, month, 0).getDate(); };
+  const thisYear = new Date().getFullYear();
+
+  // Start and end of the window. Months without a year get this year,
+  // unless the whole window is already over, then next year.
+  const first = tokens[0];
+  const last = tokens[tokens.length - 1];
+  function windowDates(baseYear) {
+    const startYear = first.year || baseYear;
+    let endYear = last.year || startYear;
+    let endDay = last.day || lastDay(endYear, last.month);
+    let endText = endYear + "-" + pad(last.month) + "-" + pad(endDay);
+    const startText = startYear + "-" + pad(first.month) + "-" + pad(first.day || 1);
+    if (!last.year && endText < startText) {   // e.g. "November to January" crosses into next year
+      endYear++;
+      endDay = last.day || lastDay(endYear, last.month);
+      endText = endYear + "-" + pad(last.month) + "-" + pad(endDay);
+    }
+    return { start: startText, end: endText };
+  }
+  let dates = windowDates(thisYear);
+  if (!first.year && !last.year && dates.end < today) dates = windowDates(thisYear + 1);
+  let start = dates.start;
+  const end = dates.end;
+
+  // "by 15 December" / "before January": the window starts today
+  if (tokens.length === 1 && /\b(by|before|until|no later than)\b/i.test(text)) start = today;
+  return { start: start, end: end, text: text };
 }
 
 function firstMatch(text, patterns) {
@@ -345,7 +431,14 @@ function firstMatch(text, patterns) {
 // Everything we know about how this university admits students
 function analyseAdmissions(uni, entry) {
   const text = autoFillText(uni);
-  let rounds = detectRounds(text);
+
+  // The structured type, if auto-fill gave a clear one
+  const structuredType = ADMISSIONS_TYPES.indexOf(uni.admissionsType) !== -1 && uni.admissionsType !== "unknown"
+    ? uni.admissionsType : "";
+
+  // Rounds: the structured list first, otherwise look for them in the text
+  const savedRounds = Array.isArray(uni.admissionsRounds) ? structuredRounds(uni.admissionsRounds) : [];
+  let rounds = savedRounds.length > 0 ? savedRounds : detectRounds(text);
 
   // Rounds you added yourself
   entry.manualRounds.forEach(function (round) {
@@ -360,16 +453,38 @@ function analyseAdmissions(uni, entry) {
     rounds.push({ key: "final", label: "Final deadline", short: "Final", date: uni.deadline,
       binding: false, source: uni.verified ? "official website" : "auto-fill" });
   }
-
   rounds.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+
+  // Clues from the text (always read: they add detail even with a structured type)
+  const rollingText = firstMatch(text, ROLLING_SIGNALS);
+  const earlyText = firstMatch(text, EARLY_SIGNALS);
+  const equalText = EQUAL_CONSIDERATION_SIGNAL.test(text);
+
+  // The admissions type we go with, and where it came from
+  let type = structuredType;
+  let typeSource = structuredType ? "admissionsType" : "fallback";
+  if (!type) {
+    if (rollingText) type = "rolling";
+    else if (equalText) type = "equalConsideration";
+    else if (earlyText) type = "early";            // "apply early", "spaces fill up"
+    else if (rounds.length > 1) type = "rounds";
+    else if (rounds.length === 1) type = "singleDeadline";
+    else type = "unknown";
+  }
+  // A "rounds" answer with only one round behaves like a single deadline
+  if (type === "rounds" && rounds.length < 2) type = "singleDeadline";
 
   return {
     rounds: rounds,
     multiRound: rounds.length > 1,
-    rolling: firstMatch(text, ROLLING_SIGNALS),
+    type: type,
+    typeSource: typeSource,
+    rolling: type === "rolling" ? (structuredType ? "admissionsType: rolling" : rollingText) : "",
+    early: earlyText,
     limited: firstMatch(text, CAPACITY_SIGNALS),
     competitive: firstMatch(text, COMPETITIVE_SIGNALS),
-    equalConsideration: EQUAL_CONSIDERATION_SIGNAL.test(text),
+    equalConsideration: type === "equalConsideration",
+    window: parseWindow(uni.recommendedWindow),
   };
 }
 
@@ -388,8 +503,16 @@ function earliestReadyDate(entry) {
   return addDays(todayText(), days);
 }
 
+// The date halfway between two dates
+function midpoint(startText, endText) {
+  return addDays(startText, Math.floor(daysBetween(startText, endText) / 2));
+}
+
 // Pick a round, and the date to submit for it.
-// Returns everything the card needs to show the plan.
+// Order of rules:
+//   1. the university's recommended window (unless you picked a round yourself)
+//   2. the admissions type: rolling / rounds / equal consideration / single deadline
+//   3. fallback text clues, when there's no structured type
 function recommendPlan(uni, entry, analysis) {
   const today = todayText();
   const ready = earliestReadyDate(entry);
@@ -408,24 +531,42 @@ function recommendPlan(uni, entry, analysis) {
     analysis.rounds.find(function (r) { return r.key === entry.targetRound; });
   const target = chosen || recommended;
 
-  // The best date to submit
+  const typeSource = analysis.typeSource === "admissionsType" ? SOURCES.type : SOURCES.fallback;
   let mode = "none";
   let plannedDate = "";
   let buffer = 0;
+  let source = "";
 
-  if (analysis.rolling) {
-    // Rolling: as soon as you can be ready
-    mode = "rolling";
+  const window = analysis.window && analysis.window.end >= today ? analysis.window : null;
+
+  if (window && !chosen) {
+    // 1. The university says when to apply: aim for the middle of that window
+    mode = "window";
+    source = SOURCES.window;
+    plannedDate = laterDate(ready, midpoint(window.start, window.end));
+  } else if (analysis.type === "rolling" || analysis.type === "early") {
+    // 2a. Rolling, or "apply early": as soon as you can be ready
+    mode = analysis.type;
+    source = typeSource;
     plannedDate = ready;
-  } else if (target && analysis.multiRound) {
-    // Several rounds: a week before the target round closes, once you're ready
+  } else if (target && analysis.type === "rounds") {
+    // 2b. Several rounds: a week before the target round closes
     mode = "rounds";
+    source = chosen ? SOURCES.manual : typeSource;
     buffer = ROUND_BUFFER_DAYS;
     plannedDate = laterDate(ready, addDays(target.date, -buffer));
+  } else if (target && analysis.type === "equalConsideration") {
+    // 2c. Equal consideration: early doesn't help, so a safety buffer only
+    mode = "equalConsideration";
+    source = typeSource;
+    buffer = BUFFER_DAYS.normal;
+    plannedDate = laterDate(ready, addDays(target.date, -buffer));
   } else if (target) {
-    // One deadline: a longer buffer for competitive courses
+    // 2d. Single deadline: a longer buffer for competitive courses
     mode = "single";
-    buffer = analysis.competitive || analysis.limited ? BUFFER_DAYS.competitive : BUFFER_DAYS.normal;
+    const competitive = Boolean(analysis.competitive || analysis.limited);
+    buffer = competitive ? BUFFER_DAYS.competitive : BUFFER_DAYS.normal;
+    source = competitive ? SOURCES.competitive : typeSource;
     plannedDate = laterDate(ready, addDays(target.date, -buffer));
   }
 
@@ -434,18 +575,22 @@ function recommendPlan(uni, entry, analysis) {
 
   return {
     mode: mode,
+    source: source,
     ready: ready,
+    window: window,
     recommended: recommended,
     target: target,
     plannedDate: plannedDate,
     buffer: buffer,
     canMakeTarget: !target || ready <= target.date,
+    canMakeWindow: !window || ready <= window.end,
   };
 }
 
 // Give dates to the milestones, counting back from the submission date.
 // If there's less time than ideal, every step is squeezed in proportion.
-// Only dates the planner set earlier (or empty ones) are changed.
+// Only dates the planner set earlier (or empty ones) are changed:
+// dates you typed yourself are never moved.
 function scheduleMilestones(entry, submitDate) {
   const today = todayText();
   const window = Math.max(daysBetween(today, submitDate), 0);
@@ -473,7 +618,8 @@ function deadlineName(round) {
   return round.key === "final" ? "final deadline" : round.label + " deadline";
 }
 
-// The strategy notes shown on the card, most important first
+// The strategy notes shown on the card, most important first.
+// The last note is always the recommendation, with its source.
 function strategyNotes(uni, entry, analysis, plan) {
   const notes = [];
   if (FINISHED_STATUSES.indexOf(entry.status) !== -1) return notes;
@@ -496,21 +642,33 @@ function strategyNotes(uni, entry, analysis, plan) {
       text: "Finishing every step takes until about " + shortDate(plan.ready) + ", after the " + deadlineName(target) +
         ". Start the slowest steps now, or aim for a later round if there is one." });
   }
+  if (plan.mode === "window" && !plan.canMakeWindow) {
+    notes.push({ type: "is-late", icon: "circle-alert",
+      text: "Finishing every step takes until about " + shortDate(plan.ready) +
+        ", after the recommended window ends. Start the slowest steps now." });
+  }
 
   // Why the plan is what it is
-  if (analysis.rolling) {
+  if (plan.mode === "window") {
+    notes.push({ type: "is-good", icon: "calendar",
+      text: "University recommends applying during: " + plan.window.text });
+  }
+  if (analysis.type === "rolling") {
     notes.push({ type: "is-good", icon: "zap",
-      text: "Rolling admissions detected (\"" + analysis.rolling + "\"): applications are reviewed as they arrive, so applying as soon as your steps are done gives you the best chance." });
+      text: "Rolling admissions detected: applications are reviewed as they arrive, so applying early increases your chances." });
+  } else if (analysis.type === "early") {
+    notes.push({ type: "is-good", icon: "zap",
+      text: "The university advises applying early (\"" + analysis.early + "\"), so the plan aims for as soon as you're ready." });
   }
   if (analysis.limited) {
     notes.push({ type: "is-tight", icon: "users",
       text: "Limited places mentioned (\"" + analysis.limited + "\"): early applicants are often prioritised, so aim for the earliest round you can make." });
   }
-  if (analysis.multiRound && plan.recommended) {
+  if (analysis.type === "rounds" && plan.recommended) {
     const rec = plan.recommended;
     notes.push({ type: "is-good", icon: "target",
-      text: rec.label + " (" + shortDate(rec.date) + ") is the earliest round you can be ready for. " +
-        "Earlier rounds usually have more places left, which tends to make them your best chance." });
+      text: "Earlier rounds usually have more places left. " + rec.label + " (" + shortDate(rec.date) +
+        ") is the earliest round you can be ready for." });
     if (target && target.key !== rec.key && target.date > rec.date) {
       notes.push({ type: "is-tight", icon: "info",
         text: "You're aiming for " + target.label + ". " + rec.label + " is earlier and you could be ready for it." });
@@ -522,7 +680,8 @@ function strategyNotes(uni, entry, analysis, plan) {
   }
   if (analysis.equalConsideration) {
     notes.push({ type: "", icon: "info",
-      text: "Applications sent before the equal consideration deadline are all treated the same, so applying earlier won't raise your chances. Your buffer is there to protect you from last-minute problems." });
+      text: "UCAS equal consideration: applying early does not increase your chances. The " + BUFFER_DAYS.normal +
+        "-day buffer is only there to protect you from last-minute problems." });
   }
   if (plan.mode === "single" && plan.canMakeTarget) {
     notes.push({ type: "", icon: "info", text: plan.buffer === BUFFER_DAYS.competitive
@@ -530,11 +689,14 @@ function strategyNotes(uni, entry, analysis, plan) {
       : "Aim to submit " + plan.buffer + " days early, leaving time to fix last-minute problems." });
   }
 
-  // The recommendation itself
+  // The recommendation itself, with where it came from
   if (plan.plannedDate) {
+    let forWhat = "";
+    if (plan.mode === "window") forWhat = " (in the university's recommended window)";
+    else if (target) forWhat = target.key === "final" ? " (before the final deadline)" : " (for " + target.label + ")";
     notes.push({ type: "is-plan", icon: "sparkles",
-      text: "Recommended submission date: " + formatDate(plan.plannedDate) +
-        (target ? (target.key === "final" ? " (before the final deadline)" : " (for " + target.label + ")") : "") + "." });
+      text: "Recommended submission date: " + formatDate(plan.plannedDate) + forWhat + ".",
+      source: plan.source });
   } else if (analysis.rounds.length === 0) {
     notes.push({ type: "", icon: "info",
       text: "No deadline known yet. Add one on the Universities tab or add a round below." });
@@ -672,9 +834,16 @@ function buildCard(uni) {
     targetSelect.innerHTML = "";
     const autoOption = document.createElement("option");
     autoOption.value = "auto";
-    autoOption.textContent = plan.recommended
-      ? "Recommended: " + plan.recommended.label + " (" + shortDate(plan.recommended.date) + ")"
-      : "Recommended";
+    // Say what "Recommended" means for this university
+    if (plan.mode === "window") {
+      autoOption.textContent = "Recommended: university's window (" + shortDate(plan.window.start) + " to " + shortDate(plan.window.end) + ")";
+    } else if (plan.mode === "rolling" || plan.mode === "early") {
+      autoOption.textContent = "Recommended: as soon as you're ready";
+    } else {
+      autoOption.textContent = plan.recommended
+        ? "Recommended: " + plan.recommended.label + " (" + shortDate(plan.recommended.date) + ")"
+        : "Recommended";
+    }
     targetSelect.append(autoOption);
     analysis.rounds.forEach(function (round) {
       const option = document.createElement("option");
@@ -906,6 +1075,9 @@ function buildTimelineVisual(entry, analysis, plan) {
 
   // Work out the start and end of the line, with a little room at each end
   const times = points.map(function (point) { return parseDate(point.date).getTime(); });
+  if (plan.window) {   // make room for the recommended window too
+    times.push(parseDate(plan.window.start).getTime(), parseDate(plan.window.end).getTime());
+  }
   let start = Math.min.apply(null, times);
   let end = Math.max.apply(null, times);
   if (end - start < 14 * DAY) end = start + 14 * DAY;  // at least two weeks wide
@@ -925,11 +1097,22 @@ function buildTimelineVisual(entry, analysis, plan) {
   elapsed.style.width = position(todayText()) + "%";
   track.append(elapsed);
 
-  // Green part: your buffer before the target round closes (red if you're late)
-  if (entry.plannedDate && plan.target) {
-    const late = entry.plannedDate > plan.target.date;
-    const from = late ? plan.target.date : entry.plannedDate;
-    const to = late ? entry.plannedDate : plan.target.date;
+  // Light blue band: the university's recommended window
+  if (plan.window) {
+    const band = makeElement("div", "tl-window");
+    band.style.left = position(plan.window.start) + "%";
+    band.style.width = Math.max(position(plan.window.end) - position(plan.window.start), 0.5) + "%";
+    band.title = "Recommended window: " + formatDate(plan.window.start) + " to " + formatDate(plan.window.end);
+    track.append(band);
+  }
+
+  // Green part: your buffer before the target round closes (red if you're late).
+  // When following the university's window, the buffer ends where the window ends.
+  const bufferEnd = plan.mode === "window" ? plan.window.end : (plan.target ? plan.target.date : "");
+  if (entry.plannedDate && bufferEnd) {
+    const late = entry.plannedDate > bufferEnd;
+    const from = late ? bufferEnd : entry.plannedDate;
+    const to = late ? entry.plannedDate : bufferEnd;
     const segment = makeElement("div", late ? "tl-segment is-late" : "tl-segment");
     segment.style.left = position(from) + "%";
     segment.style.width = Math.max(position(to) - position(from), 0.5) + "%";
@@ -957,6 +1140,13 @@ function buildTimelineVisual(entry, analysis, plan) {
     legend.append(item);
   });
 
+  if (plan.window) {
+    const item = makeElement("span", "tl-legend-item");
+    item.append(makeElement("i", "tl-dot tl-window-dot"), makeElement("strong", "", "Recommended window"),
+      " " + shortDate(plan.window.start) + " to " + shortDate(plan.window.end));
+    legend.append(item);
+  }
+
   box.append(track, legend);
   return box;
 }
@@ -965,7 +1155,10 @@ function buildStrategy(notes) {
   const list = makeElement("ul", "tl-strategy");
   notes.forEach(function (note) {
     const item = makeElement("li", "tl-note " + note.type);
-    item.append(makeIcon(note.icon), makeElement("span", "", note.text));
+    const text = makeElement("span", "", note.text);
+    // Where the recommendation came from, e.g. "Based on admissionsType"
+    if (note.source) text.append(makeElement("small", "tl-note-source", note.source));
+    item.append(makeIcon(note.icon), text);
     list.append(item);
   });
   return list;

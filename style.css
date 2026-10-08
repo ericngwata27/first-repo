@@ -2310,3 +2310,32 @@ textarea {
 .tl-note.is-plan .lucide {
   color: var(--accent-text);
 }
+
+
+/* =========================================================
+   18. RECOMMENDED WINDOW AND SOURCES (new)
+   ========================================================= */
+
+/* The university's recommended window: a light blue band on the bar */
+.tl-window {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(147, 166, 255, 0.45);
+}
+
+.tl-window-dot {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-text);
+}
+
+/* "Based on ..." under the recommendation */
+.tl-note-source {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--ink-3);
+}
