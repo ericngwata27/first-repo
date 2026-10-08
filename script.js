@@ -103,12 +103,26 @@ if (typeof L === "undefined") {
   // setView takes [latitude, longitude] and a zoom level (2 = whole world).
   map = L.map("map", { worldCopyJump: true }).setView([25, 10], 2);
 
-  // The map pictures ("tiles") come from CARTO, using OpenStreetMap data.
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
+  // The map pictures ("tiles") come from Esri. They're free to use and,
+  // unlike some other providers, work without an API key even when you
+  // open index.html straight from your computer.
+  const esriTiles = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+
+  const streetMap = L.tileLayer(esriTiles + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles &copy; Esri &mdash; Sources: Esri, HERE, Garmin, OpenStreetMap contributors, and the GIS community",
     maxZoom: 19,
-  }).addTo(map);
+  });
+
+  const satelliteMap = L.tileLayer(esriTiles + "World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles &copy; Esri &mdash; Sources: Esri, Maxar, Earthstar Geographics, and the GIS community",
+    maxZoom: 19,
+  });
+
+  // Show the street map to start with
+  streetMap.addTo(map);
+
+  // A small button in the top-right corner of the map to switch map styles
+  L.control.layers({ "Street map": streetMap, "Satellite": satelliteMap }).addTo(map);
 }
 
 // Make the pin shape. We use our own design (see .pin in style.css).
