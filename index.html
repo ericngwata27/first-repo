@@ -275,6 +275,13 @@
         <div>
           <h2>Application timeline</h2>
           <p class="muted">Plan when you'll submit, tick off each step, and add the dates to your calendar.</p>
+          <!-- NEW: the earliest date you want to submit anything. The planner
+               skips rounds that close before it, for every university. -->
+          <div class="not-before">
+            <label for="not-before"><i data-lucide="calendar"></i> Don't plan to submit before</label>
+            <input id="not-before" type="date">
+            <button type="button" class="button button-small" id="clear-not-before">Clear</button>
+          </div>
         </div>
         <button type="button" class="button" id="export-all-ics">
           <i data-lucide="calendar-plus"></i> Export all to calendar

@@ -2392,3 +2392,22 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* "Don't plan to submit before" box on the Timeline tab */
+.not-before {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 12px;
+}
+
+.not-before label {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.not-before input {
+  width: auto;
+  padding: 6px 10px;
+}

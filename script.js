@@ -40,6 +40,7 @@ const STORAGE_KEYS = {
   searchCache: "future-planner-search-cache",
   apiKey: "future-planner-claude-key",
   academicProfile: "future-planner-academic-profile",   // start date, grade, school system, country
+  timelineSettings: "future-planner-timeline-settings", // e.g. { notBefore: "2026-11-01" }
   profilePrefix: "future-planner-profile-",  // + "personal", "statement", ...
 };
 

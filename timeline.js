@@ -545,12 +545,27 @@ function analyseAdmissions(uni, entry) {
 
 // The earliest date you could realistically finish every step that's
 // not done yet (the slowest unfinished step decides it)
-function earliestReadyDate(entry) {
+function stepsReadyDate(entry) {
   let days = 0;
   MILESTONES.forEach(function (milestone) {
     if (!entry.milestones[milestone.key].done) days = Math.max(days, milestone.minDays);
   });
   return addDays(todayText(), days);
+}
+
+// "Don't plan to submit before": your own earliest submission date,
+// set at the top of the Timeline tab. It applies to every university.
+function notBeforeDate() {
+  const saved = DataStore.read(STORAGE_KEYS.timelineSettings, {}).notBefore;
+  return isDateText(saved) ? saved : "";
+}
+
+// The earliest you'll submit: when your steps can be done, but never
+// before your "don't plan to submit before" date
+function earliestReadyDate(entry) {
+  const steps = stepsReadyDate(entry);
+  const notBefore = notBeforeDate();
+  return notBefore ? laterDate(steps, notBefore) : steps;
 }
 
 // Pick a round, and the date to submit for it.
@@ -754,9 +769,14 @@ function strategyNotes(uni, entry, analysis, plan) {
       return r.date >= todayText() && r.date < plan.ready && r.date < rec.date && !r.binding;
     });
     if (tooSoon) {
+      // Skipped because of your own "don't plan before" date, or because the steps take too long?
+      const notBefore = notBeforeDate();
       notes.push({ type: "is-tight", icon: "clock",
-        text: tooSoon.label + " (" + shortDate(tooSoon.date) + ") is too soon: finishing every step takes until about " +
-          shortDate(plan.ready) + ". If you can get your steps done faster, it's worth aiming for it." });
+        text: notBefore && tooSoon.date < notBefore
+          ? tooSoon.label + " (" + shortDate(tooSoon.date) + ") closes before your earliest submission date (" +
+            shortDate(notBefore) + "), so it's skipped."
+          : tooSoon.label + " (" + shortDate(tooSoon.date) + ") is too soon: finishing every step takes until about " +
+            shortDate(plan.ready) + ". If you can get your steps done faster, it's worth aiming for it." });
     }
     if (target && target.key !== rec.key && target.date > rec.date) {
       notes.push({ type: "is-tight", icon: "info",
@@ -776,6 +796,13 @@ function strategyNotes(uni, entry, analysis, plan) {
     notes.push({ type: "", icon: "info", text: plan.buffer === BUFFER_DAYS.competitive
       ? "Competitive course (\"" + (analysis.competitive || analysis.limited) + "\"): aim to submit " + plan.buffer + " days early, leaving time for tests or interviews."
       : "Aim to submit " + plan.buffer + " days early, leaving time to fix last-minute problems." });
+  }
+
+  // Your "don't plan before" date pushed the plan later
+  const notBefore = notBeforeDate();
+  if (notBefore && plan.plannedDate && plan.plannedDate === plan.ready && stepsReadyDate(entry) < notBefore) {
+    notes.push({ type: "", icon: "calendar",
+      text: "You chose not to submit before " + formatDate(notBefore) + ", so the plan starts from then." });
   }
 
   // The recommendation itself, with where it came from
@@ -1561,6 +1588,37 @@ document.addEventListener("universities-changed", drawTimeline);
 // ...and whenever the Timeline tab is opened (so "today" is always up to date)
 document.addEventListener("tab-opened", function (event) {
   if (event.detail === "timeline-tab") drawTimeline();
+});
+
+// "Don't plan to submit before" box
+const notBeforeInput = document.getElementById("not-before");
+notBeforeInput.value = notBeforeDate();
+notBeforeInput.addEventListener("change", function () {
+  DataStore.write(STORAGE_KEYS.timelineSettings, { notBefore: isDateText(notBeforeInput.value) ? notBeforeInput.value : "" });
+
+  // Update every plan the planner made (planned dates you typed are kept)
+  let updated = 0;
+  universities.forEach(function (uni) {
+    const entry = TimelineStore.get(uni.id);
+    if (!entry.plannedDate || !entry.plannedAuto) return;
+    const plan = recommendPlan(uni, entry, analyseAdmissions(uni, entry));
+    if (plan.plannedDate && plan.plannedDate !== entry.plannedDate) {
+      entry.plannedDate = plan.plannedDate;
+      scheduleMilestones(entry, entry.plannedDate);
+      TimelineStore.save(uni.id, entry);
+      updated++;
+    }
+  });
+
+  drawTimeline();
+  showToast(notBeforeInput.value
+    ? "Plans now start no earlier than " + formatDate(notBeforeInput.value) + ". Updated " + updated +
+      (updated === 1 ? " plan" : " plans") + "; dates you typed were kept."
+    : "Earliest submission date cleared.");
+});
+document.getElementById("clear-not-before").addEventListener("click", function () {
+  notBeforeInput.value = "";
+  notBeforeInput.dispatchEvent(new Event("change"));
 });
 
 document.getElementById("export-all-ics").addEventListener("click", function () {
