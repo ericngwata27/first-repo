@@ -119,6 +119,10 @@ function scheduleMilestones(entry, submitDate) {
   });
 }
 
+// Which cards are open. Kept while the page is open, so a card stays
+// open when the Timeline is redrawn (for example after switching tabs).
+const openCards = new Set();
+
 function buildCard(uni) {
   const entry = TimelineStore.get(uni.id);
   const idPrefix = "tl-" + uni.id + "-";
@@ -146,14 +150,59 @@ function buildCard(uni) {
     }
   }
 
-  // ----- Header: name, course and status -----
-  const header = makeElement("div", "tl-header");
-  const titles = makeElement("div", "tl-titles");
+  // ----- Summary row (always visible): name, course, deadline, planned
+  // date, status and an arrow. Clicking it opens or closes the details. -----
+  const summary = makeElement("button", "tl-summary");
+  summary.type = "button";
+  summary.setAttribute("aria-controls", idPrefix + "details");
+
+  const titles = makeElement("span", "tl-titles");
   titles.append(
-    makeElement("h3", "", uni.name),
-    makeElement("p", "muted", uni.course + " · " + uni.city + ", " + uni.country +
+    makeElement("span", "tl-name", uni.name),
+    makeElement("span", "tl-course", uni.course + " · " + uni.city + ", " + uni.country +
       (uni.intake ? " · For " + intakeLabel(uni.intake) + " entry" : ""))
   );
+
+  // One small "label + value" pair, e.g. DEADLINE / 18 Nov 2026
+  function makeFact(label) {
+    const fact = makeElement("span", "tl-fact");
+    const value = makeElement("strong", "tl-fact-value");
+    fact.append(makeElement("span", "tl-fact-label", label), value);
+    return { fact: fact, value: value };
+  }
+  const deadlineFact = makeFact("Deadline");
+  const plannedFact = makeFact("Planned");
+  const facts = makeElement("span", "tl-facts");
+  facts.append(deadlineFact.fact, plannedFact.fact);
+
+  const statusLabel = makeElement("span", "tl-status-label");
+  const chevron = makeElement("span", "tl-chevron");
+  chevron.append(makeIcon("chevron-down"));
+
+  summary.append(titles, facts, statusLabel, chevron);
+
+  // Fill in the summary. plannedText lets the slider show the date while
+  // you're still dragging (before it's saved).
+  function updateSummary(plannedText) {
+    const dates = cardDates(uni, entry);
+    const deadline = findTarget(dates, entry) ||
+      dates.find(function (item) { return item.type === "deadline" && !isPastItem(item); }) || null;
+    deadlineFact.value.textContent = deadline ? itemDateText(deadline) : "None yet";
+    deadlineFact.fact.title = deadline ? itemText(deadline) : "";
+    deadlineFact.value.classList.toggle("is-empty", !deadline);
+
+    const planned = plannedText !== undefined ? plannedText : entry.plannedDate;
+    plannedFact.value.textContent = planned ? formatDate(planned) : "Not set";
+    plannedFact.value.classList.toggle("is-empty", !planned);
+
+    const status = STATUSES.find(function (s) { return s.key === entry.status; }) || STATUSES[0];
+    statusLabel.textContent = status.label;
+  }
+
+  // ----- Status (inside the details) -----
+  const statusRow = makeElement("div", "tl-status-row");
+  const statusText = makeElement("label", "tl-date-label", "Status");
+  statusText.htmlFor = idPrefix + "status";
 
   const statusSelect = document.createElement("select");
   statusSelect.className = "status-select";
@@ -171,7 +220,7 @@ function buildCard(uni) {
     saveAndRefresh();
   });
 
-  header.append(titles, statusSelect);
+  statusRow.append(statusText, statusSelect);
 
   // ----- Left side: the dates, then the timeline bar -----
   const left = makeElement("div", "tl-left");
@@ -477,9 +526,29 @@ function buildCard(uni) {
   footer.append(exportButton);
 
   // ----- Put the card together -----
+  // The details slide open below the summary (style.css section 21)
   const body = makeElement("div", "tl-body");
   body.append(left, right);
-  card.append(header, body, footer);
+  const details = makeElement("div", "tl-details");
+  details.id = idPrefix + "details";
+  const detailsInner = makeElement("div", "tl-details-inner");
+  detailsInner.append(statusRow, body, footer);
+  details.append(detailsInner);
+  card.append(summary, details);
+
+  // Open or close the details. "inert" stops the hidden parts from being
+  // reached with the keyboard while closed.
+  function setOpen(open) {
+    card.classList.toggle("is-open", open);
+    summary.setAttribute("aria-expanded", String(open));
+    details.inert = !open;
+    if (open) openCards.add(uni.id);
+    else openCards.delete(uni.id);
+  }
+  summary.addEventListener("click", function () {
+    setOpen(!card.classList.contains("is-open"));
+  });
+  setOpen(openCards.has(uni.id));
 
   // Redraw everything that depends on the saved data
   function refresh() {
@@ -491,6 +560,7 @@ function buildCard(uni) {
       card.classList.toggle("status-" + status.key, entry.status === status.key);
     });
 
+    updateSummary();
     drawGenerateBox();
     drawDates(dates, target);
     drawDateTools();
@@ -501,6 +571,7 @@ function buildCard(uni) {
       // While dragging: show the date and the warning, but don't save yet
       preview: function (dateText) {
         plannedInput.value = dateText;
+        updateSummary(dateText);
         updateWarning(dateText, target);
       },
       // When you let go (or press an arrow key): save it
@@ -509,6 +580,7 @@ function buildCard(uni) {
         plannedInput.value = entry.plannedDate;
         updateWarning(entry.plannedDate, target);
         updateMilestoneProgress();
+        updateSummary();
         save();
       },
     }));
@@ -747,7 +819,7 @@ function drawSummary() {
     next.append(makeIcon("flag"), makeElement("span", "",
       "Next up: " + item.text + " for " + item.uni.name + ", " + relativeDays(item.date) + " (" + shortDate(item.date) + ")"));
   } else {
-    next.append(makeIcon("info"), makeElement("span", "", "Drag the slider on a card to set your planned date."));
+    next.append(makeIcon("info"), makeElement("span", "", "Open a card and drag its slider to set your planned date."));
   }
   if (overdue > 0) {
     next.append(makeElement("span", "tl-overdue-count", overdue + (overdue === 1 ? " step overdue" : " steps overdue")));

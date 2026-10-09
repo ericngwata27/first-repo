@@ -22,6 +22,7 @@
    18. Application dates and the timeline slider
    19. Generate Timeline
    20. Background texture, glowing divider and hero band
+   21. Collapsible Timeline cards
    ========================================================= */
 
 
@@ -1810,13 +1811,13 @@ textarea {
 .timeline-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 .tl-card {
   position: relative;
   overflow: hidden;
-  padding: 22px 24px;
+  padding: 0;                       /* the summary row and the details have their own padding */
   animation: fade-up var(--medium) ease both;
 }
 
@@ -1831,21 +1832,8 @@ textarea {
   background: var(--status-color, var(--gray));
 }
 
-.tl-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
 .tl-titles {
   min-width: 0;
-}
-
-.tl-titles h3 {
-  font-size: 1.15rem;
-  margin-bottom: 2px;
 }
 
 /* The status dropdown looks like a colored pill */
@@ -2017,15 +2005,6 @@ textarea {
 }
 
 @media (max-width: 600px) {
-  .tl-card {
-    padding: 18px;
-  }
-
-  .tl-header {
-    flex-direction: column;
-    gap: 10px;
-  }
-
   .tl-footer {
     justify-content: stretch;
   }
@@ -2767,5 +2746,207 @@ body::before {
 
   .glow-divider {
     margin: 24px auto;
+  }
+}
+
+
+/* =========================================================
+   21. COLLAPSIBLE TIMELINE CARDS (new)
+   Closed: one summary row (name, course, deadline, planned date,
+   status, arrow). Click it to slide the details open.
+   ========================================================= */
+
+/* ----- The summary row (a button covering the top of the card) ----- */
+.tl-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 18px 22px 18px 26px;     /* a little extra on the left for the status strip */
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background var(--fast);
+}
+
+.tl-summary:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.tl-summary:focus-visible {
+  outline: 3px solid rgba(147, 166, 255, 0.45);
+  outline-offset: -3px;
+  border-radius: var(--radius-lg);
+}
+
+.tl-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-course {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.84rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Deadline and planned date */
+.tl-facts {
+  display: flex;
+  gap: 24px;
+}
+
+.tl-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 96px;
+}
+
+.tl-fact-label {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.tl-fact-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.tl-fact-value.is-empty {
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+/* The status as a small coloured label (the colour comes from the card's status) */
+.tl-status-label {
+  padding: 4px 11px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--status-color, var(--ink-2));
+  background: var(--status-soft, var(--surface-2));
+  border-radius: 999px;
+}
+
+/* The arrow turns over when the card is open */
+.tl-chevron {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-3);
+  border-radius: 50%;
+  transition: transform var(--medium) ease, color var(--fast), background var(--fast);
+}
+
+.tl-chevron .lucide {
+  width: 18px;
+  height: 18px;
+}
+
+.tl-summary:hover .tl-chevron {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.tl-card.is-open .tl-chevron {
+  transform: rotate(180deg);
+  color: #7dd3fc;
+}
+
+/* ----- The details: slide open smoothly -----
+   A grid row that grows from 0 to its full height ("0fr" to "1fr"),
+   so the animation works whatever the content's height is. */
+.tl-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--medium) ease, opacity var(--medium) ease;
+}
+
+.tl-card.is-open .tl-details {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.tl-details-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 22px 0 26px;
+}
+
+.tl-card.is-open .tl-details-inner {
+  padding-bottom: 22px;
+}
+
+/* A thin line of light between the summary and the details */
+.tl-details-inner::before {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-bottom: 18px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.35) 50%, transparent);
+}
+
+/* Status dropdown at the top of the details */
+.tl-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-details,
+  .tl-chevron {
+    transition: none;
+  }
+}
+
+/* ----- Phones: name on top, then the facts, status and arrow ----- */
+@media (max-width: 600px) {
+  .tl-summary {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px 12px;
+    padding: 16px 16px 16px 20px;
+  }
+
+  .tl-facts {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 20px;
+  }
+
+  .tl-titles {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .tl-details-inner {
+    padding: 0 16px 0 20px;
+  }
+
+  .tl-card.is-open .tl-details-inner {
+    padding-bottom: 18px;
   }
 }
