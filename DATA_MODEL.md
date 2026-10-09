@@ -1,6 +1,8 @@
 # Data model
 
-Everything My Future Planner saves, what each field means, and how it maps to a future backend.
+Everything planmyfuture saves, what each field means, and how it maps to a future backend.
+
+> The site used to be called *My Future Planner*. The storage keys (`future-planner-…`), the export file's `"app": "my-future-planner"` and the calendar event IDs keep that old name on purpose: changing them would lose saved data, break older export files and duplicate calendar events.
 
 Today all of it lives in the browser's `localStorage`. The code reads it **once at startup** into one in-memory `state` object (`store.js`), and every change goes through **one `save()` function**. Swapping `localStorage` for a server only changes that file.
 
@@ -109,7 +111,7 @@ Saved under `future-planner-academic-profile`. It's sent with every auto-fill se
 
 ---
 
-## Export file (`my-future-planner-YYYY-MM-DD.json`)
+## Export file (`planmyfuture-YYYY-MM-DD.json`)
 
 **Export my data** saves your data in this shape, and **Import data** reads it back. It's also how your data will move into the backend.
 

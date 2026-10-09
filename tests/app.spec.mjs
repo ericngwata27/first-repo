@@ -1,4 +1,4 @@
-// Core tests for My Future Planner. Run them with: npm test
+// Core tests for planmyfuture. Run them with: npm test
 //
 // Each test opens the website in a real (headless) Chrome, clicks around
 // like a person would, and checks what's on screen and what was saved.
@@ -261,7 +261,7 @@ test("export and import move all your data (but never the API key)", async ({ pa
   // A file that isn't ours changes nothing
   await openTab(page, "Profile");
   await page.locator("#import-file").setInputFiles({ name: "x.json", mimeType: "application/json", buffer: Buffer.from('{"hello": 1}') });
-  await expect(page.locator(".toast.is-warning")).toContainText("isn't a My Future Planner export");
+  await expect(page.locator(".toast.is-warning")).toContainText("isn't a planmyfuture export");
   await expect(page.locator("#stat-total")).toHaveText("1");
   expect(page.errors).toEqual([]);
 });

@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: universities.js
+// PLANMYFUTURE: universities.js
 // The Universities page: the form, the list, the details panel and the stats.
 //
 // Sections: 8. The form, 9. The list, 10. The details panel, 11. Summary stats

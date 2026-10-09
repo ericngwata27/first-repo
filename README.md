@@ -1,4 +1,4 @@
-# My Future Planner
+# planmyfuture
 
 A personal university-admissions planner:
 

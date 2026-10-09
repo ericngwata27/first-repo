@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: globe.js
+// PLANMYFUTURE: globe.js
 // The 3D globe and finding a place's coordinates.
 //
 // Sections: 5. The 3D globe, 6. Finding a location's coordinates

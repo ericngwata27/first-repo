@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: main.js
+// PLANMYFUTURE: main.js
 // Starts the app: load the data, update old data, draw every page.
 //
 // Sections: 15. Start the app

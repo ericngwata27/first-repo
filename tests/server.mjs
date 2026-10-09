@@ -23,4 +23,4 @@ createServer(async (request, response) => {
   } catch {
     response.writeHead(404).end("Not found");
   }
-}).listen(PORT, () => console.log("My Future Planner: http://localhost:" + PORT));
+}).listen(PORT, () => console.log("planmyfuture: http://localhost:" + PORT));
