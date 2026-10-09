@@ -454,6 +454,15 @@ textarea:focus-visible {
   cursor: grabbing;
 }
 
+/* The globe fades in once its pictures are ready (script.js adds .is-ready) */
+#globe > :not(.globe-message) {
+  transition: opacity 1.2s ease;
+}
+
+#globe:not(.is-ready) > :not(.globe-message) {
+  opacity: 0;
+}
+
 /* Shown instead of the globe when it can't load */
 .globe-message {
   padding: 24px;
@@ -464,8 +473,8 @@ textarea:focus-visible {
    comes from --pin-color: gold, red or blue. */
 .globe-pin {
   position: relative;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   padding: 0;
   border: none;
   background: none;
@@ -478,13 +487,13 @@ textarea:focus-visible {
 /* The bright center */
 .globe-pin-core {
   position: absolute;
-  inset: 3px;
+  inset: 3px;                         /* a crisp 6px dot */
   border-radius: 50%;
   background: #fff;
   box-shadow:
-    0 0 0 2px var(--pin-color),
-    0 0 10px 3px var(--pin-color),
-    0 0 26px 8px color-mix(in srgb, var(--pin-color) 45%, transparent);
+    0 0 0 1.5px var(--pin-color),
+    0 0 6px 1px var(--pin-color),
+    0 0 16px 4px color-mix(in srgb, var(--pin-color) 35%, transparent);
   transition: transform var(--fast);
 }
 
@@ -493,7 +502,7 @@ textarea:focus-visible {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 2px solid var(--pin-color);
+  border: 1.5px solid var(--pin-color);
   opacity: 0;
   animation: globe-pulse 2.4s ease-out infinite;
 }
@@ -516,7 +525,7 @@ textarea:focus-visible {
 /* The label next to a dot: shown on hover, and always for the selected one */
 .globe-pin-label {
   position: absolute;
-  left: 20px;
+  left: 16px;
   top: 50%;
   transform: translate(0, -50%) scale(0.96);
   display: flex;
