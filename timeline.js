@@ -177,6 +177,10 @@ function buildCard(uni) {
   const left = makeElement("div", "tl-left");
 
   const datesHeading = makeElement("h4", "eyebrow", "Application dates");
+
+  // "Timeline not generated yet" + Generate Timeline / Clear Timeline.
+  // Nothing is filled in until you click Generate Timeline.
+  const generateBox = makeElement("div", "tl-generate");
   const dateList = makeElement("ul", "tl-date-list");
   const dateTools = makeElement("div", "tl-date-tools");   // add / restore buttons and the add form
 
@@ -205,7 +209,51 @@ function buildCard(uni) {
   warning.setAttribute("role", "status");
   planBox.append(plannedRow, barHolder, warning);
 
-  left.append(datesHeading, dateList, dateTools, rollingLine, planBox);
+  left.append(datesHeading, generateBox, dateList, dateTools, rollingLine, planBox);
+
+  // Generate Timeline: add every date auto-fill found for this university
+  // (and its deadline from the Universities tab). Dates you added, your
+  // planned date and your milestones are never changed.
+  function generateTimeline() {
+    entry.generated = true;
+    saveAndRefresh();
+    const found = (uni.applicationDates || []).length + (uni.deadline ? 1 : 0);
+    if (found === 0) {
+      showToast("Auto-fill found no dates for " + uni.name + ". Add dates yourself, or use Search again on the Universities tab.", "circle-alert");
+    } else {
+      showToast("Timeline generated for " + uni.name + ".");
+    }
+  }
+
+  // Clear Timeline: take the found dates off again (your own dates stay)
+  function clearTimeline() {
+    entry.generated = false;
+    entry.removedDates = [];
+    const ownTarget = entry.manualDates.some(function (d) { return d.id === entry.targetId; });
+    if (!ownTarget) entry.targetId = "";
+    saveAndRefresh();
+    showToast("Cleared the generated dates for " + uni.name + ". Your own dates and plans were kept.");
+  }
+
+  function drawGenerateBox() {
+    generateBox.innerHTML = "";
+    if (!entry.generated) {
+      generateBox.append(makeElement("p", "tl-generate-message", "Timeline not generated yet"));
+    }
+    const generateButton = makeElement("button", "button button-small button-primary");
+    generateButton.type = "button";
+    generateButton.append(makeIcon("sparkles"), "Generate Timeline");
+    generateButton.addEventListener("click", generateTimeline);
+    generateBox.append(generateButton);
+
+    if (entry.generated) {
+      const clearButton = makeElement("button", "button button-small");
+      clearButton.type = "button";
+      clearButton.append(makeIcon("eraser"), "Clear Timeline");
+      clearButton.addEventListener("click", clearTimeline);
+      generateBox.append(clearButton);
+    }
+  }
 
   // Show a small warning if your planned date is after the deadline you chose
   function updateWarning(dateText, target) {
@@ -221,7 +269,7 @@ function buildCard(uni) {
   // The list of dates
   function drawDates(dates, target) {
     dateList.innerHTML = "";
-    if (dates.length === 0) {
+    if (dates.length === 0 && entry.generated) {
       dateList.append(makeElement("li", "tl-date-empty muted", "No application dates found yet. Add one below."));
     }
 
@@ -443,6 +491,7 @@ function buildCard(uni) {
       card.classList.toggle("status-" + status.key, entry.status === status.key);
     });
 
+    drawGenerateBox();
     drawDates(dates, target);
     drawDateTools();
 

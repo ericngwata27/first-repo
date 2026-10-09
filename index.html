@@ -11,6 +11,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Figtree:wght@400;500;600&display=swap">
 
+  <!-- Where the optional "Glow" effect loads its three.js files from
+       (the same three.js version Globe.gl is built with) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.185.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.185.0/examples/jsm/"
+      }
+    }
+  </script>
+
   <!-- Our own stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -74,12 +85,17 @@
         <!-- Globe.gl draws the globe inside this empty div -->
         <div id="globe"></div>
 
-        <!-- Switches for the globe (saved in this browser) -->
-        <div class="globe-controls" role="group" aria-label="Globe options">
+        <!-- One gear button opens the globe settings (saved in this browser) -->
+        <button type="button" class="globe-settings-button" id="globe-settings-button"
+                aria-label="Globe settings" aria-expanded="false" aria-controls="globe-settings">
+          <i data-lucide="settings"></i>
+        </button>
+        <div class="globe-settings" id="globe-settings" role="group" aria-label="Globe settings" hidden>
           <label><input type="checkbox" data-globe-setting="spin"> Spin</label>
-          <label><input type="checkbox" data-globe-setting="dark"> Dark globe</label>
+          <label><input type="checkbox" data-globe-setting="satellite"> Satellite view</label>
           <label><input type="checkbox" data-globe-setting="borders"> Borders</label>
           <label><input type="checkbox" data-globe-setting="arcs"> Arcs from home</label>
+          <label><input type="checkbox" data-globe-setting="glow"> Glow</label>
         </div>
 
         <!-- Details of the selected university. script.js fills in .panel-body -->
@@ -93,7 +109,7 @@
         <!-- Legend explaining the pin colors -->
         <div class="legend">
           <span><i class="dot dot-first"></i> First choice</span>
-          <span><i class="dot dot-urgent"></i> Under 15 days / overdue</span>
+          <span><i class="dot dot-urgent"></i> Due soon</span>
           <span><i class="dot dot-normal"></i> Other</span>
         </div>
       </div>
