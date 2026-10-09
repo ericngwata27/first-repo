@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: store.js
+// PLANMYFUTURE: store.js
 // Your saved data: one in-memory `state`, loadState() and save().
 //
 // Sections: 1. Saving and loading

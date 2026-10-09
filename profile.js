@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: profile.js
+// PLANMYFUTURE: profile.js
 // The Profile tab: your texts, your academic profile, and Export / Import.
 //
 // Sections: 13. The Profile tab, 14. Export and import
@@ -117,7 +117,7 @@ function buildExport() {
 
 document.getElementById("export-data").addEventListener("click", function () {
   const today = new Date().toISOString().slice(0, 10);
-  const fileName = "my-future-planner-" + today + ".json";
+  const fileName = "planmyfuture-" + today + ".json";
   downloadFile(JSON.stringify(buildExport(), null, 2), fileName, "application/json");
   showToast("Saved your data to " + fileName + ". Keep it somewhere safe.", "download");
 });
@@ -134,10 +134,10 @@ function readExportFile(text) {
   try {
     data = JSON.parse(text);
   } catch (error) {
-    throw new Error("That file isn't a My Future Planner export (it isn't valid JSON).");
+    throw new Error("That file isn't a planmyfuture export (it isn't valid JSON).");
   }
   if (!isPlainObject(data) || data.app !== "my-future-planner" || !Array.isArray(data.universities)) {
-    throw new Error("That file isn't a My Future Planner export.");
+    throw new Error("That file isn't a planmyfuture export.");
   }
   if (Number(data.version) > EXPORT_VERSION) {
     throw new Error("That file was made by a newer version of the planner. Reload the page and try again.");

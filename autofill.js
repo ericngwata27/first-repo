@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: autofill.js
+// PLANMYFUTURE: autofill.js
 // Auto-fill: Wikidata, Wikipedia and Claude. runAutoFill() is the one entry point.
 //
 // Sections: 7. Auto-fill, plus remembered searches and the API key settings

@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER - APPLICATION TIMELINE
+// PLANMYFUTURE - APPLICATION TIMELINE
 //
 // This file builds the Timeline tab. It loads last, after the other files
 // and reuses things from it: the `universities` list, DataStore,
@@ -907,7 +907,7 @@ function buildIcs(events) {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//My Future Planner//Application Timeline//EN",
+    "PRODID:-//planmyfuture//Application Timeline//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "X-WR-CALNAME:University applications",

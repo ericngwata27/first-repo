@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: dates.js
+// PLANMYFUTURE: dates.js
 // Deadlines and "your date": the timeline data every page shares.
 //
 // Sections: 3. Deadlines, 3b. Your dates

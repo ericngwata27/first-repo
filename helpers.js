@@ -1,5 +1,5 @@
 // =========================================================
-// MY FUTURE PLANNER: helpers.js
+// PLANMYFUTURE: helpers.js
 // Small tools every other file uses: making elements, tabs, toasts.
 //
 // Sections: 2. Small helpers, 4. Tabs, 12. Toasts
