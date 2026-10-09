@@ -775,13 +775,13 @@ const timelineSummary = document.getElementById("timeline-summary");
 
 function drawSummary() {
   timelineSummary.innerHTML = "";
-  if (universities.length === 0) return;
+  if (state.universities.length === 0) return;
 
   const upcoming = [];   // things still to do, with a date
   let overdue = 0;
   const counts = {};
 
-  universities.forEach(function (uni) {
+  state.universities.forEach(function (uni) {
     const entry = TimelineStore.get(uni.id);
     counts[entry.status] = (counts[entry.status] || 0) + 1;
     if (FINISHED_STATUSES.indexOf(entry.status) !== -1) return;
@@ -975,14 +975,14 @@ const timelineEmpty = document.getElementById("timeline-empty");
 
 function drawTimeline() {
   // Forget timeline data for universities that were deleted
-  TimelineStore.removeMissing(universities.map(function (uni) { return uni.id; }));
+  TimelineStore.removeMissing(state.universities.map(function (uni) { return uni.id; }));
 
   timelineList.innerHTML = "";
-  timelineEmpty.hidden = universities.length > 0;
+  timelineEmpty.hidden = state.universities.length > 0;
 
   // Soonest date first (your planned date, chosen deadline or next deadline),
   // like the university list
-  sortByDeadline(universities).forEach(function (uni) {
+  sortByDeadline(state.universities).forEach(function (uni) {
     timelineList.append(buildCard(uni));
   });
 
@@ -999,7 +999,8 @@ document.addEventListener("tab-opened", function (event) {
 });
 
 document.getElementById("export-all-ics").addEventListener("click", function () {
-  exportCalendar(universities, "university-applications.ics");
+  exportCalendar(state.universities, "university-applications.ics");
 });
 
-drawTimeline();
+// Draw once the saved data has loaded (see startApp in script.js)
+appReady.then(drawTimeline);

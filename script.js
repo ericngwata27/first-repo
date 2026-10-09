@@ -22,31 +22,55 @@
 
 
 // =========================================================
-// 1. SAVING AND LOADING (the "data store")
+// 1. SAVING AND LOADING
 //
-// EVERY read and write of saved data goes through DataStore.
-// Right now it uses localStorage, a small storage space in your
-// browser that keeps data after you close the page.
+// All your data lives in one object, `state`, in memory.
+//   - loadState() fills it ONCE when the page opens.
+//   - save("part") writes one part of it back. It's the ONLY place
+//     anything is written.
+// The rest of the site just reads and changes `state`, then calls save().
 //
-// BACKEND: when your server is ready, this is the only place
-// that needs to change. Replace the insides of these functions
-// with fetch() calls to your server, and the rest of the site
-// keeps working as before.
+// Right now loadState() and save() use localStorage, a small storage space
+// in your browser that keeps data after you close the page.
+//
+// BACKEND: when your server is ready, only loadState() and save() change:
+// loadState() fetches everything from the server, and save() sends the
+// changed part. (loadState is already "async" for that reason.)
+// See DATA_MODEL.md for every field.
 // =========================================================
 
-// The names everything is saved under, in one place
+// The names everything is saved under in the browser, in one place
 const STORAGE_KEYS = {
   universities: "future-planner-universities",
   timeline: "future-planner-timeline",
-  timelineVersion: "future-planner-timeline-version",   // which saved-data updates have run
+  timelineVersion: "future-planner-timeline-version",   // which one-time data updates have run
   searchCache: "future-planner-search-cache",
   apiKey: "future-planner-claude-key",
   academicProfile: "future-planner-academic-profile",   // start date, grade, school system, country
   globeSettings: "future-planner-globe-settings",       // the globe's on/off switches
   homePlace: "future-planner-home-place",               // where your home country is on the globe
-  profilePrefix: "future-planner-profile-",  // + "personal", "statement", ...
+  profilePrefix: "future-planner-profile-",             // + "personal", "statement", ...
 };
 
+// The Profile tab's text boxes (one saved text each)
+const PROFILE_KEYS = ["personal", "achievements", "statement", "notes", "snippets"];
+
+// Everything the site knows, in memory
+const state = {
+  universities: [],      // list of universities (DATA_MODEL.md section 1)
+  timeline: {},          // timeline entry per university id (section 3)
+  profile: {},           // profile texts, e.g. { personal: "...", statement: "..." } (section 5)
+  academicProfile: {},   // start date, grade, school system, country (section 6)
+  settings: {
+    globe: {},           // the globe's switches
+    homePlace: null,     // where your home country is on the globe
+    apiKey: "",          // your Claude API key (never exported)
+  },
+  searchCache: {},       // remembered auto-fill searches
+  meta: { timelineVersion: 0 },
+};
+
+// Reading and writing the browser's storage. Only loadState() and save() use it.
 const DataStore = {
   // Read data saved as JSON (lists and objects). Returns `fallback` if
   // nothing is saved, or if the browser blocks storage (private mode).
@@ -65,7 +89,7 @@ const DataStore = {
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      return false; // storage full or blocked: the page still works
+      return false; // storage full or blocked
     }
   },
 
@@ -80,34 +104,64 @@ const DataStore = {
 
   writeText: function (key, text) {
     try {
-      localStorage.setItem(key, text);
+      if (text) localStorage.setItem(key, text);
+      else localStorage.removeItem(key);
       return true;
     } catch (error) {
       return false;
     }
   },
+};
 
-  remove: function (key) {
-    try {
-      localStorage.removeItem(key);
-    } catch (error) {
-      // nothing to remove
-    }
+// Fill `state` from storage. Runs once, when the page opens.
+async function loadState() {
+  state.universities = DataStore.read(STORAGE_KEYS.universities, []);
+  state.timeline = DataStore.read(STORAGE_KEYS.timeline, {});
+  state.academicProfile = DataStore.read(STORAGE_KEYS.academicProfile, {});
+  state.settings.globe = DataStore.read(STORAGE_KEYS.globeSettings, {});
+  state.settings.homePlace = DataStore.read(STORAGE_KEYS.homePlace, null);
+  state.settings.apiKey = DataStore.readText(STORAGE_KEYS.apiKey);
+  state.searchCache = DataStore.read(STORAGE_KEYS.searchCache, {});
+  state.meta.timelineVersion = DataStore.read(STORAGE_KEYS.timelineVersion, 0);
+  state.profile = {};
+  PROFILE_KEYS.forEach(function (key) {
+    state.profile[key] = DataStore.readText(STORAGE_KEYS.profilePrefix + key);
+  });
+}
+
+// How each part of `state` is written to storage
+const SAVERS = {
+  universities: function () { return DataStore.write(STORAGE_KEYS.universities, state.universities); },
+  timeline: function () { return DataStore.write(STORAGE_KEYS.timeline, state.timeline); },
+  academicProfile: function () { return DataStore.write(STORAGE_KEYS.academicProfile, state.academicProfile); },
+  globeSettings: function () { return DataStore.write(STORAGE_KEYS.globeSettings, state.settings.globe); },
+  homePlace: function () { return DataStore.write(STORAGE_KEYS.homePlace, state.settings.homePlace); },
+  apiKey: function () { return DataStore.writeText(STORAGE_KEYS.apiKey, state.settings.apiKey); },
+  searchCache: function () { return DataStore.write(STORAGE_KEYS.searchCache, state.searchCache); },
+  meta: function () { return DataStore.write(STORAGE_KEYS.timelineVersion, state.meta.timelineVersion); },
+  profile: function () {
+    return PROFILE_KEYS.every(function (key) {
+      return DataStore.writeText(STORAGE_KEYS.profilePrefix + key, state.profile[key] || "");
+    });
   },
 };
 
-function loadUniversities() {
-  return DataStore.read(STORAGE_KEYS.universities, []);
+// Save one part of `state` (e.g. save("universities")).
+// Returns true if it worked. Either way it tells the page, with a
+// "data-saved" or "data-save-failed" event, so the page can show it.
+function save(part) {
+  const ok = SAVERS[part]();
+  document.dispatchEvent(new CustomEvent(ok ? "data-saved" : "data-save-failed", { detail: part }));
+  return ok;
 }
 
+// Save the universities and tell other pages (like the Timeline) they changed
 function saveUniversities() {
-  DataStore.write(STORAGE_KEYS.universities, universities);
-
-  // Tell other pages (like the Application Timeline) that the list changed
+  save("universities");
   document.dispatchEvent(new CustomEvent("universities-changed"));
 }
 
-// Our main data: a list of university objects. One looks like this:
+// A university looks like this (all fields: DATA_MODEL.md section 1):
 // {
 //   id: "3b241101-e2bb-4255-...",       a unique ID (see newId)
 //   name: "University of Edinburgh",
@@ -123,9 +177,8 @@ function saveUniversities() {
 //   rolling: false,                     true if the university uses rolling admissions
 //   pros: "Beautiful city\nStrong CS department",
 //   cons: "Cold winters",
-//   lat: 55.94, lng: -3.18              where the pin goes on the map
+//   lat: 55.94, lng: -3.18              where the pin goes on the globe
 // }
-let universities = loadUniversities();
 
 let selectedId = null;  // the university shown in the details panel
 let editingId = null;   // the university being edited in the form
@@ -173,7 +226,7 @@ function newId() {
 }
 
 function findUniversity(id) {
-  return universities.find(function (uni) {
+  return state.universities.find(function (uni) {
     return uni.id === id;
   });
 }
@@ -288,9 +341,11 @@ const MILESTONES = [
 // column (manualDates can be its own "application_dates" table).
 // Replace the insides of TimelineStore with fetch() calls.
 
+// Timeline entries live in state.timeline (section 1); this reads and
+// changes them, and saves through save("timeline").
 const TimelineStore = {
   readAll: function () {
-    return DataStore.read(STORAGE_KEYS.timeline, {});
+    return state.timeline;
   },
 
   // Get one university's entry, with every field filled in
@@ -310,18 +365,18 @@ const TimelineStore = {
       status: saved.status || "researching",
       targetId: typeof saved.targetId === "string" ? saved.targetId : "",
       generated: saved.generated === true,   // true once you've clicked Generate Timeline
-      manualDates: Array.isArray(saved.manualDates) ? saved.manualDates : [],
-      removedDates: Array.isArray(saved.removedDates) ? saved.removedDates : [],
+      // Copies, so changes only count once they're saved
+      manualDates: Array.isArray(saved.manualDates) ? saved.manualDates.slice() : [],
+      removedDates: Array.isArray(saved.removedDates) ? saved.removedDates.slice() : [],
       milestones: milestones,
       updatedAt: saved.updatedAt || null,
     };
   },
 
   save: function (uniId, entry) {
-    const all = TimelineStore.readAll();
     entry.updatedAt = Date.now();
-    all[uniId] = entry;
-    DataStore.write(STORAGE_KEYS.timeline, all);
+    state.timeline[uniId] = entry;
+    save("timeline");
   },
 
   // Remove entries for universities that have been deleted
@@ -334,7 +389,7 @@ const TimelineStore = {
         changed = true;
       }
     });
-    if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
+    if (changed) save("timeline");
   },
 
   // Entries saved by the old planner had a recommended plan in them.
@@ -376,21 +431,22 @@ const TimelineStore = {
       changed = true;
     });
 
-    if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
+    if (changed) save("timeline");
   },
 
   // The Timeline used to show auto-fill's dates straight away. Now you
   // click "Generate Timeline" first. Universities you added before that
   // change keep their timelines: this marks them as generated, once.
   markExistingGenerated: function (uniIds) {
-    if (DataStore.read(STORAGE_KEYS.timelineVersion, 0) >= 2) return;
+    if (state.meta.timelineVersion >= 2) return;
     const all = TimelineStore.readAll();
     uniIds.forEach(function (id) {
       all[id] = all[id] || {};
       if (!("generated" in all[id])) all[id].generated = true;
     });
-    DataStore.write(STORAGE_KEYS.timeline, all);
-    DataStore.write(STORAGE_KEYS.timelineVersion, 2);
+    state.meta.timelineVersion = 2;
+    save("timeline");
+    save("meta");
   },
 };
 
@@ -627,7 +683,7 @@ const PREFERS_LESS_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)"
 
 // The globe's settings. Missing ones get these defaults.
 function getGlobeSettings() {
-  const saved = DataStore.read(STORAGE_KEYS.globeSettings, {});
+  const saved = state.settings.globe;
   return {
     spin: typeof saved.spin === "boolean" ? saved.spin : !PREFERS_LESS_MOTION,
     borders: saved.borders === true,
@@ -991,7 +1047,7 @@ function getHomePlace(callback) {
   const country = getAcademicProfile().countryOfResidence;
   if (!country) return callback(null);
 
-  const saved = DataStore.read(STORAGE_KEYS.homePlace, null);
+  const saved = state.settings.homePlace;
   if (saved && saved.country === country) return callback(saved);
 
   if (homeLookupRunning) return callback(null);
@@ -1001,7 +1057,8 @@ function getHomePlace(callback) {
     .then(function (results) {
       if (!results[0]) return callback(null);
       const place = { country: country, lat: Number(results[0].lat), lng: Number(results[0].lon) };
-      DataStore.write(STORAGE_KEYS.homePlace, place);
+      state.settings.homePlace = place;
+      save("homePlace");
       callback(place);
     })
     .catch(function () { callback(null); })
@@ -1030,7 +1087,7 @@ function drawArcs() {
 // Draw all the dots again from the universities list
 function drawPins() {
   if (!globe) return;
-  globePoints = universities.map(toGlobePoint).filter(Boolean);
+  globePoints = state.universities.map(toGlobePoint).filter(Boolean);
   globe.htmlElementsData(globePoints);
   globe.ringsData(globePoints.filter(function (point) { return point.isSelected; }));
   applyGlobeSettings();
@@ -1075,12 +1132,19 @@ document.addEventListener("keydown", function (event) {
   if (event.key === "Escape" && !globeSettingsMenu.hidden) setSettingsOpen(false);
 });
 
+// Tick the switches to match the saved settings (called at startup)
+function showGlobeSettings() {
+  document.querySelectorAll("[data-globe-setting]").forEach(function (box) {
+    box.checked = getGlobeSettings()[box.dataset.globeSetting];
+  });
+}
+
 document.querySelectorAll("[data-globe-setting]").forEach(function (box) {
-  box.checked = getGlobeSettings()[box.dataset.globeSetting];
   box.addEventListener("change", function () {
     const settings = getGlobeSettings();
     settings[box.dataset.globeSetting] = box.checked;
-    DataStore.write(STORAGE_KEYS.globeSettings, settings);
+    state.settings.globe = settings;
+    save("globeSettings");
     applyGlobeSettings();
     if (box.dataset.globeSetting === "arcs" && box.checked && !getAcademicProfile().countryOfResidence) {
       showToast("Add your country of residence on the Profile tab to see arcs from home.", "circle-alert");
@@ -1138,7 +1202,7 @@ async function findCoordinates(name, city, country) {
 const CLAUDE_MODEL = "claude-opus-5-5";
 
 function getApiKey() {
-  return DataStore.readText(STORAGE_KEYS.apiKey);
+  return state.settings.apiKey;
 }
 
 // "https://www.ed.ac.uk/study" -> "ed.ac.uk"
@@ -1670,7 +1734,7 @@ function migrateUniversity(uni) {
 //   schoolSystem: "Abitur", countryOfResidence: "Germany" }
 
 function getAcademicProfile() {
-  const saved = DataStore.read(STORAGE_KEYS.academicProfile, {});
+  const saved = state.academicProfile;
   const text = function (value) { return typeof value === "string" ? value.trim().slice(0, 80) : ""; };
   return {
     intendedStartDate: /^\d{4}-\d{2}$/.test(saved.intendedStartDate || "") ? saved.intendedStartDate : "",
@@ -1999,7 +2063,7 @@ function searchCacheKey(name, course) {
 }
 
 function loadSearchCache() {
-  return DataStore.read(STORAGE_KEYS.searchCache, {});
+  return state.searchCache;
 }
 
 // Returns a remembered search, or null if there isn't a usable one
@@ -2028,7 +2092,8 @@ function saveCachedSearch(key, entry) {
   });
 
   // (if storage is full or blocked, the search still works, it just isn't remembered)
-  DataStore.write(STORAGE_KEYS.searchCache, cache);
+  state.searchCache = cache;
+  save("searchCache");
 }
 
 // ----- Running a search -----
@@ -2341,7 +2406,7 @@ form.addEventListener("submit", async function (event) {
     showToast("Saved changes to " + data.name);
   } else {
     data.id = newId();                 // a unique id
-    universities.push(data);
+    state.universities.push(data);
     savedId = data.id;
     newestId = data.id;                // so its card animates in
     showToast(data.name + " added to your map");
@@ -2387,7 +2452,8 @@ function saveAcademicProfile() {
   for (const key in ACADEMIC_FIELDS) {
     profile[key] = document.getElementById(ACADEMIC_FIELDS[key]).value.trim();
   }
-  DataStore.write(STORAGE_KEYS.academicProfile, profile);
+  state.academicProfile = profile;
+  save("academicProfile");
   showAcademicProfile();
   document.dispatchEvent(new CustomEvent("universities-changed"));   // the Timeline re-checks start dates
 }
@@ -2414,7 +2480,8 @@ document.getElementById("save-key").addEventListener("click", function () {
     showToast("That doesn't look like a Claude API key. It should start with sk-ant-", "circle-alert");
     return;
   }
-  if (!DataStore.writeText(STORAGE_KEYS.apiKey, key)) {
+  state.settings.apiKey = key;
+  if (!save("apiKey")) {
     showToast("Your browser blocked saving the key.", "circle-alert");
     return;
   }
@@ -2423,7 +2490,8 @@ document.getElementById("save-key").addEventListener("click", function () {
 });
 
 document.getElementById("remove-key").addEventListener("click", function () {
-  DataStore.remove(STORAGE_KEYS.apiKey);
+  state.settings.apiKey = "";
+  save("apiKey");
   updateAiState();
   showToast("API key removed. AI search is off.", "trash-2");
 });
@@ -2438,9 +2506,9 @@ const emptyList = document.getElementById("empty-list");
 
 function drawList() {
   uniList.innerHTML = "";
-  emptyList.hidden = universities.length > 0;
+  emptyList.hidden = state.universities.length > 0;
 
-  sortByDeadline(universities).forEach(function (uni) {
+  sortByDeadline(state.universities).forEach(function (uni) {
     const myDate = getMyDate(uni);           // your planned date, chosen deadline or next deadline
     const status = getMyDateStatus(myDate);
 
@@ -2522,7 +2590,7 @@ function deleteUniversity(id) {
 
   // Wait for the animation (260ms) to finish, then really remove it
   setTimeout(function () {
-    universities = universities.filter(function (u) {
+    state.universities = state.universities.filter(function (u) {
       return u.id !== id;
     });
     if (editingId === id) stopEditing();
@@ -2714,7 +2782,7 @@ function drawDetails() {
   starButton.append(makeIcon("star"), uni.firstChoice ? "First choice" : "Mark as first choice");
   starButton.addEventListener("click", function () {
     const makeFirst = !uni.firstChoice;
-    universities.forEach(function (other) { delete other.firstChoice; });
+    state.universities.forEach(function (other) { delete other.firstChoice; });
     if (makeFirst) uni.firstChoice = true;
     saveUniversities();
     redrawEverything();
@@ -2764,16 +2832,16 @@ function selectUniversity(id, flyToIt) {
 // =========================================================
 
 function drawStats() {
-  document.getElementById("stat-total").textContent = universities.length;
+  document.getElementById("stat-total").textContent = state.universities.length;
 
   // Count different countries (ignoring capital letters)
-  const countries = new Set(universities.map(function (uni) {
+  const countries = new Set(state.universities.map(function (uni) {
     return uni.country.toLowerCase();
   }));
   document.getElementById("stat-countries").textContent = countries.size;
 
   // The soonest of your dates that hasn't passed yet
-  const upcoming = sortByDeadline(universities).map(function (uni) {
+  const upcoming = sortByDeadline(state.universities).map(function (uni) {
     return { uni: uni, myDate: getMyDate(uni) };
   }).find(function (item) {
     return item.myDate.date && daysUntil(item.myDate.date) >= 0;
@@ -2842,16 +2910,19 @@ function updateProfileStatus(textarea, justSaved) {
   }
 }
 
+// Fill in the texts saved before (called at startup)
+function showProfileTexts() {
+  document.querySelectorAll(".profile-field").forEach(function (textarea) {
+    textarea.value = state.profile[textarea.dataset.key] || "";
+    updateProfileStatus(textarea, false);
+  });
+}
+
+// Save on every change
 document.querySelectorAll(".profile-field").forEach(function (textarea) {
-  const storageKey = STORAGE_KEYS.profilePrefix + textarea.dataset.key;
-
-  // Load what was saved before
-  textarea.value = DataStore.readText(storageKey);
-  updateProfileStatus(textarea, false);
-
-  // Save on every change
   textarea.addEventListener("input", function () {
-    DataStore.writeText(storageKey, textarea.value);
+    state.profile[textarea.dataset.key] = textarea.value;
+    save("profile");
     updateProfileStatus(textarea, true);
   });
 });
@@ -2888,24 +2959,35 @@ document.querySelectorAll(".copy-button").forEach(function (button) {
 
 document.getElementById("year").textContent = new Date().getFullYear();
 
-// Update universities saved by older versions to the current format
-// (see migrateUniversity in section 7), and save them once if anything changed
-// IDs are text. (Universities saved before had numbers: keep the same
-// value, as text, so their Timeline data and calendar events still match.)
-let idsChanged = false;
-universities.forEach(function (uni) {
-  if (typeof uni.id !== "string") {
-    uni.id = String(uni.id);
-    idsChanged = true;
-  }
-});
-if (universities.map(migrateUniversity).some(Boolean) || idsChanged) {
-  DataStore.write(STORAGE_KEYS.universities, universities);
-}
-TimelineStore.migrate();   // the same for timeline entries saved by the old planner
-TimelineStore.markExistingGenerated(universities.map(function (uni) { return uni.id; }));
+// Load everything once, update data saved by older versions, then draw the page.
+async function startApp() {
+  await loadState();
 
-updateAiState(); // show whether AI search is on
-showAcademicProfile(); // fill in your academic profile
-redrawEverything();
-zoomToAllPins();
+  // Update universities saved by older versions to the current format
+  // (see migrateUniversity in section 7), and save them once if anything changed.
+  // IDs are text. (Universities saved before had numbers: keep the same
+  // value, as text, so their Timeline data and calendar events still match.)
+  let idsChanged = false;
+  state.universities.forEach(function (uni) {
+    if (typeof uni.id !== "string") {
+      uni.id = String(uni.id);
+      idsChanged = true;
+    }
+  });
+  if (state.universities.map(migrateUniversity).some(Boolean) || idsChanged) {
+    save("universities");
+  }
+  TimelineStore.migrate();   // the same for timeline entries saved by the old planner
+  TimelineStore.markExistingGenerated(state.universities.map(function (uni) { return uni.id; }));
+
+  updateAiState();        // show whether AI search is on
+  showAcademicProfile();  // fill in your academic profile
+  showProfileTexts();     // and your profile texts
+  showGlobeSettings();    // tick the globe's switches
+  applyGlobeSettings();
+  redrawEverything();
+  zoomToAllPins();
+}
+
+// Other files (timeline.js) wait for this before drawing: appReady.then(...)
+const appReady = startApp();
