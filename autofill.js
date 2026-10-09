@@ -5,7 +5,7 @@
 // Sections: 7. Auto-fill, plus remembered searches and the API key settings
 // (The site's JavaScript is split into files that load in this order:
 //  store.js, helpers.js, dates.js, globe.js, autofill.js, universities.js,
-//  profile.js, main.js, timeline.js. The section numbers run across all of them.)
+//  profile.js, auth.js, sync.js, main.js, timeline.js. The section numbers run across all of them.)
 //
 // The Claude API key is used ONLY in this file (runAutoFill and
 // searchOfficialPages). The backend will replace runAutoFill's inside.

@@ -5,7 +5,7 @@
 // Sections: 3. Deadlines, 3b. Your dates
 // (The site's JavaScript is split into files that load in this order:
 //  store.js, helpers.js, dates.js, globe.js, autofill.js, universities.js,
-//  profile.js, main.js, timeline.js. The section numbers run across all of them.)
+//  profile.js, auth.js, sync.js, main.js, timeline.js. The section numbers run across all of them.)
 // =========================================================
 
 // =========================================================

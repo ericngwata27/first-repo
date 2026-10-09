@@ -5,9 +5,8 @@
 // Sections: 16. Signing in
 // (Loads after profile.js and before main.js.)
 //
-// For now, signing in only creates your account. Your data still
-// saves in this browser; saving it to your account comes next
-// (store.js will use supabaseClient then).
+// Signed in, your planner is also saved to your account (sync.js),
+// so it's the same on every device you sign in on.
 // =========================================================
 
 // =========================================================
@@ -66,7 +65,21 @@ if (!supabaseClient) {
     // setTimeout: Supabase asks that nothing else waits inside this callback
     setTimeout(function () {
       showAccount();
-      if (event === "SIGNED_IN" && !wasSignedIn) showToast("Signed in as " + currentUser.email + ".", "user-check");
+      if (event === "SIGNED_IN" && !wasSignedIn) {
+        showToast("Signed in as " + currentUser.email + ". Your planner now saves to your account.", "user-check");
+      }
+      // Signed in from another tab: connect this one too, once the page is ready
+      if (event === "SIGNED_IN" && currentUser) {
+        appReady.then(async function () {
+          if (cloudUser && cloudUser.id === currentUser.id) return;
+          if (await connectToAccount(currentUser)) showWholePlanner();
+        });
+      }
+      // Signed out in another tab: this tab forgets the planner too
+      if (event === "SIGNED_OUT" && cloudUser) {
+        clearLocalPlanner();
+        showWholePlanner();
+      }
     }, 0);
   });
 }
@@ -116,9 +129,18 @@ signInForm.addEventListener("submit", async function (event) {
 });
 
 document.getElementById("sign-out").addEventListener("click", async function () {
+  // Send your latest changes first, so nothing is lost
+  if (!(await flushToAccount())) {
+    showToast("Couldn't save your latest changes to your account. Check your connection and try again.", "circle-alert");
+    return;
+  }
   await supabaseClient.auth.signOut();
   currentUser = null;
+  // Remove the planner from this browser (it's safe in your account)
+  clearLocalPlanner();
+  showWholePlanner();
   showAccount();
   accountDialog.close();
-  showToast("Signed out. Your data is still saved in this browser.", "log-out");
+  setSaveStatus("saved", "Saved");
+  showToast("Signed out. Your planner is saved in your account and was removed from this browser.", "log-out");
 });

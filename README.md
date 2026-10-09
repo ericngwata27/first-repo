@@ -6,7 +6,7 @@ A personal university-admissions planner:
 - **Timeline**: one card per university. Pick the deadline you're aiming for, drag a slider to set your planned submission date, tick off milestones (they count back from your date), and export everything to your calendar.
 - **Profile**: your academic profile (intended start date, school system, country) plus text you reuse in applications (personal statement, achievements, notes).
 
-Everything is saved **in your browser only** (`localStorage`) for now. Use **Export my data** on the Profile tab to keep a backup, and **Import data** to bring it back or move it to another browser. A backend is planned; see [DATA_MODEL.md](DATA_MODEL.md).
+Signed out, everything is saved **in your browser only** (`localStorage`). **Sign in** (email link, no password) and your planner is also saved to your account (Supabase), so it's the same on every device. Use **Export my data** on the Profile tab to keep a backup, and **Import data** to bring it back or move it to another browser. How everything is stored: [DATA_MODEL.md](DATA_MODEL.md).
 
 ## Live site
 
@@ -53,6 +53,7 @@ The tests (`tests/app.spec.mjs`) open the site in headless Chrome and check the 
 | `universities.js` | The Universities page: form, list, details panel, stats |
 | `profile.js` | The Profile tab, plus Export / Import |
 | `auth.js` | Signing in with an email link (Supabase) |
+| `sync.js` | Saving your planner to your account, so it's the same on every device |
 | `supabase/schema.sql` | The database setup: paste it into Supabase's SQL Editor |
 | `main.js` | Starts the app: loads data, updates old data, draws everything |
 | `timeline.js` | The Timeline page (cards, dates, slider, milestones, calendar export) |

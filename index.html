@@ -537,7 +537,7 @@
         <input id="sign-in-email" type="email" autocomplete="email" placeholder="name@example.com" required>
         <button class="button button-primary" id="sign-in-submit" type="submit"><i data-lucide="mail"></i> Email me a link</button>
       </form>
-      <p class="muted account-note">For now your planner still saves in this browser. Saving it to your account is coming next.</p>
+      <p class="muted account-note">Signed in, your planner saves to your account, so it's the same on every device. What's already in this browser is added to it.</p>
     </div>
 
     <div data-view="sent" hidden>
@@ -549,7 +549,7 @@
     <div data-view="signed-in" hidden>
       <h2>Your account</h2>
       <p>Signed in as <strong id="account-email"></strong>.</p>
-      <p class="muted account-note">Your planner still saves in this browser for now. Saving it to your account is coming next.</p>
+      <p class="muted account-note">Your planner saves to your account. Signing out removes it from this browser (it stays in your account).</p>
       <button class="button" id="sign-out" type="button"><i data-lucide="log-out"></i> Sign out</button>
     </div>
   </dialog>
@@ -571,6 +571,7 @@
   <script src="universities.js"></script>  <!-- the Universities page -->
   <script src="profile.js"></script>       <!-- the Profile tab, export / import -->
   <script src="auth.js"></script>          <!-- signing in (Supabase) -->
+  <script src="sync.js"></script>          <!-- saving your planner to your account -->
   <script src="main.js"></script>          <!-- starts the app -->
   <script src="timeline.js"></script>      <!-- the Timeline page -->
 </body>

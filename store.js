@@ -5,10 +5,10 @@
 // Sections: 1. Saving and loading
 // (The site's JavaScript is split into files that load in this order:
 //  store.js, helpers.js, dates.js, globe.js, autofill.js, universities.js,
-//  profile.js, main.js, timeline.js. The section numbers run across all of them.)
+//  profile.js, auth.js, sync.js, main.js, timeline.js. The section numbers run across all of them.)
 //
-// BACKEND: this is the only file that talks to storage. Swap
-// loadState() and save() for server requests and nothing else changes.
+// Only loadState() and save() touch storage. When you're signed in they
+// also use your account (sync.js), so nothing else in the site changes.
 // =========================================================
 
 // =========================================================
@@ -23,10 +23,9 @@
 // Right now loadState() and save() use localStorage, a small storage space
 // in your browser that keeps data after you close the page.
 //
-// BACKEND: when your server is ready, only loadState() and save() change:
-// loadState() fetches everything from the server, and save() sends the
-// changed part. (loadState is already "async" for that reason.)
-// See DATA_MODEL.md for every field.
+// The browser always keeps a copy. When you're signed in, loadState()
+// also loads your account's copy and save() also sends changes there
+// (both in sync.js). See DATA_MODEL.md for every field.
 // =========================================================
 
 // The names everything is saved under in the browser, in one place
@@ -40,6 +39,7 @@ const STORAGE_KEYS = {
   globeSettings: "future-planner-globe-settings",       // the globe's on/off switches
   homePlace: "future-planner-home-place",               // where your home country is on the globe
   profilePrefix: "future-planner-profile-",             // + "personal", "statement", ...
+  owner: "future-planner-owner",                         // the account this browser's planner belongs to (sync.js)
 };
 
 // The Profile tab's text boxes (one saved text each)
@@ -123,6 +123,20 @@ async function loadState() {
     state.profile[key] = DataStore.readText(STORAGE_KEYS.profilePrefix + key);
   });
   dataLoaded = true;
+
+  // Signed in? Then load your account's copy (sync.js). If the account
+  // can't be reached, the browser's copy is used and the header says so.
+  if (supabaseClient) {
+    try {
+      const session = (await supabaseClient.auth.getSession()).data.session;
+      if (session) {
+        currentUser = session.user;
+        await connectToAccount(session.user);
+      }
+    } catch (error) {
+      // carry on with this browser's copy
+    }
+  }
 }
 
 // How each part of `state` is written to storage
@@ -148,6 +162,7 @@ const SAVERS = {
 function save(part) {
   const ok = dataLoaded && SAVERS[part]();
   document.dispatchEvent(new CustomEvent(ok ? "data-saved" : "data-save-failed", { detail: part }));
+  if (dataLoaded) scheduleCloudSave(part);   // also to your account, if you're signed in (sync.js)
   return ok;
 }
 
