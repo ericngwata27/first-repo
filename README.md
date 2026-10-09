@@ -8,6 +8,12 @@ A personal university-admissions planner:
 
 Everything is saved **in your browser only** (`localStorage`) for now. Use **Export my data** on the Profile tab to keep a backup, and **Import data** to bring it back or move it to another browser. A backend is planned; see [DATA_MODEL.md](DATA_MODEL.md).
 
+## Live site
+
+**https://ericngwata27.github.io/first-repo/**
+
+It's hosted free on GitHub Pages and updates by itself about a minute after every merge into `main`. Each visitor's data is still saved only in their own browser.
+
 ## Run it
 
 It's a static site: plain HTML, CSS and JavaScript with no build step.
