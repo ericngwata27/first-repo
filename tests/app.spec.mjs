@@ -88,6 +88,7 @@ test("adds a university using Wikidata's details", async ({ page }) => {
   await expect(page.locator("#stat-total")).toHaveText("1");
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("future-planner-universities")));
   expect(saved[0]).toMatchObject({ name: "ESCP", city: "Paris", country: "France", lat: 48.85, website: "https://escp.eu/" });
+  expect(saved[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);   // a UUID
   expect(page.errors).toEqual([]);
 });
 

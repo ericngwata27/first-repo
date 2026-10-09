@@ -109,7 +109,7 @@ function saveUniversities() {
 
 // Our main data: a list of university objects. One looks like this:
 // {
-//   id: 1712345678901,                 a unique number
+//   id: "3b241101-e2bb-4255-...",       a unique ID (see newId)
 //   name: "University of Edinburgh",
 //   course: "BSc Computer Science",
 //   city: "Edinburgh",
@@ -158,6 +158,18 @@ function refreshIcons() {
   if (window.lucide) {
     lucide.createIcons();
   }
+}
+
+// A new unique ID, e.g. "3b241101-e2bb-4255-8caf-4136c566a962".
+// Safe to use on every device (unlike the time-based numbers used before).
+function newId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  // Older browsers: build one from random numbers
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
 }
 
 function findUniversity(id) {
@@ -259,7 +271,7 @@ const MILESTONES = [
 //   generated: true,               true once you've clicked Generate Timeline
 //                                  (until then, auto-fill's dates aren't shown)
 //   manualDates: [                 dates you added yourself
-//     { id: "m1712345678901", label: "Scholarship", campus: "", date: "2027-01-10", type: "deadline" }
+//     { id: "3b241101-e2bb-...", label: "Scholarship", campus: "", date: "2027-01-10", type: "deadline" }
 //   ],
 //   removedDates: ["opens||applications open|2026-09-01"],
 //                                  ids of found dates you deleted
@@ -317,7 +329,7 @@ const TimelineStore = {
     const all = TimelineStore.readAll();
     let changed = false;
     Object.keys(all).forEach(function (id) {
-      if (existingIds.indexOf(Number(id)) === -1) {
+      if (existingIds.indexOf(String(id)) === -1) {
         delete all[id];
         changed = true;
       }
@@ -2328,7 +2340,7 @@ form.addEventListener("submit", async function (event) {
     savedId = oldUni.id;
     showToast("Saved changes to " + data.name);
   } else {
-    data.id = Date.now();              // a unique id
+    data.id = newId();                 // a unique id
     universities.push(data);
     savedId = data.id;
     newestId = data.id;                // so its card animates in
@@ -2878,7 +2890,16 @@ document.getElementById("year").textContent = new Date().getFullYear();
 
 // Update universities saved by older versions to the current format
 // (see migrateUniversity in section 7), and save them once if anything changed
-if (universities.map(migrateUniversity).some(Boolean)) {
+// IDs are text. (Universities saved before had numbers: keep the same
+// value, as text, so their Timeline data and calendar events still match.)
+let idsChanged = false;
+universities.forEach(function (uni) {
+  if (typeof uni.id !== "string") {
+    uni.id = String(uni.id);
+    idsChanged = true;
+  }
+});
+if (universities.map(migrateUniversity).some(Boolean) || idsChanged) {
   DataStore.write(STORAGE_KEYS.universities, universities);
 }
 TimelineStore.migrate();   // the same for timeline entries saved by the old planner

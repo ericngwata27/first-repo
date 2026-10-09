@@ -429,7 +429,7 @@ function buildCard(uni) {
         showToast("Pick the date first.", "circle-alert");
         return;
       }
-      entry.manualDates.push({ id: "m" + Date.now(), label: nameInput.value.trim() || DATE_TYPE_LABELS[typeSelect.value],
+      entry.manualDates.push({ id: newId(), label: nameInput.value.trim() || DATE_TYPE_LABELS[typeSelect.value],
         campus: "", date: dateInput.value, type: typeSelect.value });
       saveAndRefresh();
     });
