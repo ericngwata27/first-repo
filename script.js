@@ -2097,35 +2097,31 @@ function saveCachedSearch(key, entry) {
   save("searchCache");
 }
 
-// ----- Running a search -----
-// options.fresh = true skips remembered searches (used by "Search again")
-async function lookUpUniversity(options) {
-  const fresh = Boolean(options && options.fresh);
-  const name = document.getElementById("name").value.trim();
-  const course = document.getElementById("course").value.trim();
-
-  clearAllErrors();
-  if (name.length < 2 || course.length < 2) {
-    if (name.length < 2) setFieldError("name", "Enter the university's name.");
-    if (course.length < 2) setFieldError("course", "Enter the course you're interested in.");
-    document.getElementById(name.length < 2 ? "name" : "course").focus();
-    return;
-  }
-
+// ----- Running a search: runAutoFill() -----
+// The ONE function the rest of the site calls to auto-fill a university.
+// It's also the only place that uses your Claude API key.
+//
+// BACKEND: when the server is ready, this function's inside becomes one
+// request, e.g. fetch("/api/autofill", ...), and the key lives on the
+// server. Everything that calls runAutoFill() stays the same.
+//
+// request = { name, course, fresh }   fresh: true skips remembered searches
+// onStep(i) is called as each step starts (for the loading animation)
+// Returns { result, details, errorText, cachedAt }:
+//   result    the combined university details (see below)
+//   details   what Claude found, or null (no key, or the search failed)
+//   errorText why the Claude search failed, or ""
+//   cachedAt  when a remembered search was saved, or null for a new search
+async function runAutoFill(request, onStep) {
+  const name = request.name;
+  const course = request.course;
   const apiKey = getApiKey();
-  const steps = apiKey
-    ? ["Finding the university", "Searching the official website", "Filling in the form"]
-    : ["Finding the university", "Filling in the form"];
-
-  submitButton.disabled = true;
-  searchAgainButton.disabled = true;
-  showFormMessage("");
-  showSteps(steps, 0);
+  const step = onStep || function () {};
 
   // Use a remembered search if there is one (only for AI searches, since
   // those are the ones that cost money)
   const cacheKey = searchCacheKey(name, course);
-  const cached = apiKey && !fresh ? getCachedSearch(cacheKey) : null;
+  const cached = apiKey && !request.fresh ? getCachedSearch(cacheKey) : null;
 
   let found = null;
   let about = "";
@@ -2138,6 +2134,7 @@ async function lookUpUniversity(options) {
     details = cached.details;
   } else {
     // Step A: Wikidata
+    step(0);
     try {
       found = await findOnWikidata(name);
     } catch (error) {
@@ -2152,7 +2149,7 @@ async function lookUpUniversity(options) {
 
     // Step B: Claude searches the official website (only with an API key)
     if (apiKey) {
-      showSteps(steps, 1);
+      step(1);
       try {
         details = await searchOfficialPages(apiKey, found ? found.officialName : name, course, found);
       } catch (error) {
@@ -2161,7 +2158,6 @@ async function lookUpUniversity(options) {
     }
 
     about = await aboutRequest;
-    showSteps(steps, steps.length - 1);
 
     // Remember a successful AI search for next time
     if (details) {
@@ -2190,6 +2186,47 @@ async function lookUpUniversity(options) {
     intake: details ? getAcademicProfile().intendedStartDate : "",   // the start date these dates are for
   };
 
+  return { result: result, details: details, errorText: errorText, cachedAt: cached ? cached.savedAt : null };
+}
+
+// True when auto-fill can search official websites with Claude
+function hasAiSearch() {
+  return Boolean(getApiKey());
+}
+
+
+// ----- The "Find details" button -----
+// Checks the form, shows progress while runAutoFill() works, then fills in the boxes.
+// options.fresh = true skips remembered searches (used by "Search again")
+async function lookUpUniversity(options) {
+  const fresh = Boolean(options && options.fresh);
+  const name = document.getElementById("name").value.trim();
+  const course = document.getElementById("course").value.trim();
+
+  clearAllErrors();
+  if (name.length < 2 || course.length < 2) {
+    if (name.length < 2) setFieldError("name", "Enter the university's name.");
+    if (course.length < 2) setFieldError("course", "Enter the course you're interested in.");
+    document.getElementById(name.length < 2 ? "name" : "course").focus();
+    return;
+  }
+
+  const steps = hasAiSearch()
+    ? ["Finding the university", "Searching the official website", "Filling in the form"]
+    : ["Finding the university", "Filling in the form"];
+
+  submitButton.disabled = true;
+  searchAgainButton.disabled = true;
+  showFormMessage("");
+  showSteps(steps, 0);
+
+  const answer = await runAutoFill({ name: name, course: course, fresh: fresh }, function (i) {
+    showSteps(steps, i);
+  });
+  showSteps(steps, steps.length - 1);
+  const result = answer.result;
+  const details = answer.details;
+
   // Fill in the form
   foundSection.hidden = false;
   setAutoField("city", result.city, true);
@@ -2199,7 +2236,7 @@ async function lookUpUniversity(options) {
   });
 
   lookup = result;
-  showLookupResult(result, errorText, cached ? cached.savedAt : null);
+  showLookupResult(result, answer.errorText, answer.cachedAt);
   submitButton.disabled = false;
   searchAgainButton.disabled = false;
   searchAgainButton.hidden = false;
