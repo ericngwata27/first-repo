@@ -64,6 +64,17 @@
          ========================================================= -->
     <section id="universities-tab" class="tab-content">
 
+      <!-- ----- Hero band: a headline beside a planet's glowing edge.
+           Drawn entirely with CSS (style.css section 20), no images. ----- -->
+      <div class="hero">
+        <div class="hero-text">
+          <p class="hero-eyebrow">Admissions planner</p>
+          <h1 class="hero-title">Every deadline, <span>one globe.</span></h1>
+          <p class="hero-subtitle">Your universities, their rounds and your own plan, in one calm place.</p>
+        </div>
+        <div class="hero-planet" aria-hidden="true"></div>
+      </div>
+
       <!-- ----- Summary numbers at the top ----- -->
       <div class="stats">
         <div class="stat">
@@ -92,7 +103,6 @@
         </button>
         <div class="globe-settings" id="globe-settings" role="group" aria-label="Globe settings" hidden>
           <label><input type="checkbox" data-globe-setting="spin"> Spin</label>
-          <label><input type="checkbox" data-globe-setting="satellite"> Satellite view</label>
           <label><input type="checkbox" data-globe-setting="borders"> Borders</label>
           <label><input type="checkbox" data-globe-setting="arcs"> Arcs from home</label>
           <label><input type="checkbox" data-globe-setting="glow"> Glow</label>
@@ -113,6 +123,9 @@
           <span><i class="dot dot-normal"></i> Other</span>
         </div>
       </div>
+
+      <!-- A thin line of light between the globe and the work area -->
+      <div class="glow-divider" aria-hidden="true"></div>
 
       <!-- ----- Form on the left, list on the right ----- -->
       <div class="work-area">
@@ -300,6 +313,7 @@
           <i data-lucide="calendar-plus"></i> Export all to calendar
         </button>
       </div>
+      <div class="glow-divider" aria-hidden="true"></div>
 
       <!-- Summary: how many at each status, and the next thing to do -->
       <div class="timeline-summary" id="timeline-summary"></div>
@@ -325,6 +339,7 @@
         <h2>My profile</h2>
         <p class="muted">Write things once, then copy them into any application. Everything saves automatically as you type.</p>
       </div>
+      <div class="glow-divider" aria-hidden="true"></div>
 
       <!-- ----- NEW Section: Your academic profile -----
            Sent with every auto-fill search, so deadlines are for your start

@@ -560,10 +560,10 @@ tabButtons.forEach(function (button) {
 // =========================================================
 // 5. THE 3D GLOBE (using the Globe.gl library)
 //
-// A slowly spinning globe with glowing dots for your universities.
-// The Earth is lit like the real thing: daylight where the sun is up right
-// now, city lights on the night side, a soft line between them, shiny
-// oceans and a blue glow around the edge (see "The Earth's look" below).
+// A dark, minimal, slowly spinning globe with glowing dots for your
+// universities. The night side shows city lights, the side where the sun
+// is up right now is gently lifted, with a soft line between them, a faint
+// ocean shine and a blue glow around the edge (see "The Earth's look" below).
 // Dot colors (same as the legend):
 //   gold = your first choice (star it on its details card)
 //   red  = your date is under 15 days away, or overdue (see getMyDate)
@@ -571,7 +571,7 @@ tabButtons.forEach(function (button) {
 // Click a dot to fly to it and open its details card.
 //
 // The gear button opens the settings (saved in this browser):
-//   Spin, Satellite view (daylight everywhere), Borders, Arcs from home, Glow
+//   Spin, Borders, Arcs from home, Glow
 // =========================================================
 
 let globe = null;
@@ -621,7 +621,6 @@ function getGlobeSettings() {
   const saved = DataStore.read(STORAGE_KEYS.globeSettings, {});
   return {
     spin: typeof saved.spin === "boolean" ? saved.spin : !PREFERS_LESS_MOTION,
-    satellite: saved.satellite === true,     // daylight everywhere instead of real day and night
     borders: saved.borders === true,
     arcs: saved.arcs === true,
     glow: saved.glow === true,               // cinematic bloom: off unless you turn it on (it's heavy on phones)
@@ -780,11 +779,12 @@ function setZoomLimit() {
 }
 
 // ----- The Earth's look (a "shader": a small program the graphics card runs) -----
-// For every point on the globe it mixes:
-//   daylight picture   where the sun is up right now
-//   city lights        on the night side, with a soft line between the two
-//   ocean shine        a highlight where sunlight reflects off the water
-//   edge glow          a blue rim, brighter towards the edge of the globe
+// One dark, minimal look. For every point on the globe it mixes:
+//   dim daylight     where the sun is up right now: faded, cool and dark,
+//                    so the globe stays dark overall
+//   city lights      on the night side, with a soft line between the two
+//   ocean shine      a faint highlight where sunlight meets the water
+//   edge glow        a blue rim, brighter towards the edge of the globe
 // It needs three.js (loaded from the import map in index.html). If that
 // can't load, the globe keeps its plain night picture.
 const EARTH_VERTEX_SHADER = `
@@ -805,7 +805,6 @@ const EARTH_FRAGMENT_SHADER = `
   uniform sampler2D nightMap;
   uniform sampler2D waterMap;
   uniform vec3 sunDirection;
-  uniform float allDay;            // 1 = Satellite view (daylight everywhere)
   varying vec2 vUv;
   varying vec3 vNormalWorld;
   varying vec3 vPositionWorld;
@@ -813,12 +812,16 @@ const EARTH_FRAGMENT_SHADER = `
   void main() {
     vec3 normal = normalize(vNormalWorld);
     vec3 toCamera = normalize(cameraPosition - vPositionWorld);
-    vec3 sun = normalize(mix(sunDirection, toCamera, allDay));   // Satellite view: lit from the front
+    vec3 sun = normalize(sunDirection);
 
     // Day and night, with a soft line between them
     float sunAmount = dot(normal, sun);
     float dayAmount = smoothstep(-0.12, 0.22, sunAmount);
-    vec3 day = texture2D(dayMap, vUv).rgb * (0.3 + 0.75 * clamp(sunAmount, 0.0, 1.0));
+    // Daylight, but dark and minimal: faded towards grey, cooled towards blue, dimmed
+    vec3 dayPicture = texture2D(dayMap, vUv).rgb;
+    float grey = dot(dayPicture, vec3(0.299, 0.587, 0.114));
+    vec3 day = mix(vec3(grey), dayPicture, 0.4) * vec3(0.68, 0.8, 1.0)
+             * (0.12 + 0.22 * clamp(sunAmount, 0.0, 1.0));
     vec3 night = texture2D(nightMap, vUv).rgb * 1.35 + vec3(0.004, 0.008, 0.02);
     vec3 color = mix(night, day, dayAmount);
 
@@ -826,11 +829,11 @@ const EARTH_FRAGMENT_SHADER = `
     float water = texture2D(waterMap, vUv).r;
     vec3 halfway = normalize(sun + toCamera);
     float shine = pow(max(dot(normal, halfway), 0.0), 220.0) * water * dayAmount;
-    color += shine * vec3(0.55, 0.7, 0.9) * 0.45;
+    color += shine * vec3(0.4, 0.6, 1.0) * 0.12;
 
     // Edge glow
-    float rim = pow(1.0 - max(dot(normal, toCamera), 0.0), 3.0);
-    color += rim * vec3(0.16, 0.42, 1.0) * 0.6;
+    float rim = pow(1.0 - max(dot(normal, toCamera), 0.0), 4.0);
+    color += rim * vec3(0.16, 0.42, 1.0) * 0.4;
 
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>
@@ -885,7 +888,6 @@ function setupEarthLook() {
             nightMap: { value: textures[1] },
             waterMap: { value: textures[2] },
             sunDirection: { value: new THREE.Vector3(1, 0, 0) },
-            allDay: { value: getGlobeSettings().satellite ? 1 : 0 },
           },
           vertexShader: EARTH_VERTEX_SHADER,
           fragmentShader: EARTH_FRAGMENT_SHADER,
@@ -952,11 +954,6 @@ function applyGlobeSettings() {
   if (!globe) return;
   const settings = getGlobeSettings();
 
-  if (earthMaterial) {
-    earthMaterial.uniforms.allDay.value = settings.satellite ? 1 : 0;
-  } else {
-    globe.globeImageUrl(settings.satellite ? GLOBE_FILES.day : GLOBE_FILES.night);
-  }
   // Spin, but not while a university's details are open
   globe.controls().autoRotate = settings.spin && selectedId === null;
   setGlow(settings.glow);
