@@ -37,6 +37,7 @@
 const STORAGE_KEYS = {
   universities: "future-planner-universities",
   timeline: "future-planner-timeline",
+  timelineVersion: "future-planner-timeline-version",   // which saved-data updates have run
   searchCache: "future-planner-search-cache",
   apiKey: "future-planner-claude-key",
   academicProfile: "future-planner-academic-profile",   // start date, grade, school system, country
@@ -260,6 +261,8 @@ const MILESTONES = [
 //   status: "applying",            one of the STATUSES keys
 //   targetId: "deadline|paris|round 1|2026-11-18",
 //                                  the deadline you chose, or "" for none
+//   generated: true,               true once you've clicked Generate Timeline
+//                                  (until then, auto-fill's dates aren't shown)
 //   manualDates: [                 dates you added yourself
 //     { id: "m1712345678901", label: "Scholarship", campus: "", date: "2027-01-10", type: "deadline" }
 //   ],
@@ -299,6 +302,7 @@ const TimelineStore = {
       plannedDate: isDateText(saved.plannedDate) ? saved.plannedDate : "",
       status: saved.status || "researching",
       targetId: typeof saved.targetId === "string" ? saved.targetId : "",
+      generated: saved.generated === true,   // true once you've clicked Generate Timeline
       manualDates: Array.isArray(saved.manualDates) ? saved.manualDates : [],
       removedDates: Array.isArray(saved.removedDates) ? saved.removedDates : [],
       milestones: milestones,
@@ -352,6 +356,7 @@ const TimelineStore = {
         plannedDate: old.plannedAuto ? "" : old.plannedDate || "",
         status: old.status || "researching",
         targetId: "",
+        generated: true,
         manualDates: (Array.isArray(old.manualRounds) ? old.manualRounds : []).map(function (round, index) {
           const item = cleanDateItem({ label: round.label, date: round.date, type: "deadline" });
           if (item) item.id = round.key || "m" + index;
@@ -365,6 +370,20 @@ const TimelineStore = {
     });
 
     if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
+  },
+
+  // The Timeline used to show auto-fill's dates straight away. Now you
+  // click "Generate Timeline" first. Universities you added before that
+  // change keep their timelines: this marks them as generated, once.
+  markExistingGenerated: function (uniIds) {
+    if (DataStore.read(STORAGE_KEYS.timelineVersion, 0) >= 2) return;
+    const all = TimelineStore.readAll();
+    uniIds.forEach(function (id) {
+      all[id] = all[id] || {};
+      if (!("generated" in all[id])) all[id].generated = true;
+    });
+    DataStore.write(STORAGE_KEYS.timeline, all);
+    DataStore.write(STORAGE_KEYS.timelineVersion, 2);
   },
 };
 
@@ -394,8 +413,9 @@ function isPastItem(item) {
 }
 
 // ----- The dates for one university -----
-// Every date auto-fill found, the deadline from the Universities tab,
-// and the dates you added. Dates you deleted are left out.
+// The dates you added, plus (once you've clicked Generate Timeline)
+// every date auto-fill found and the deadline from the Universities tab.
+// Dates you deleted are left out.
 // Each one gets an id so it can be chosen or deleted.
 
 function autoDateId(item) {
@@ -404,8 +424,10 @@ function autoDateId(item) {
 
 function cardDates(uni, entry) {
   const dates = [];
+  // Before you click Generate Timeline, only your own dates are used
+  const found = entry.generated ? uni.applicationDates || [] : [];
 
-  (uni.applicationDates || []).forEach(function (raw) {
+  found.forEach(function (raw) {
     const item = cleanDateItem(raw);
     if (!item) return;
     item.id = autoDateId(item);
@@ -413,7 +435,7 @@ function cardDates(uni, entry) {
   });
 
   // The deadline on the Universities tab, if it isn't in the list already
-  if (isDateText(uni.deadline) && !dates.some(function (d) { return d.type === "deadline" && d.date === uni.deadline; })) {
+  if (entry.generated && isDateText(uni.deadline) && !dates.some(function (d) { return d.type === "deadline" && d.date === uni.deadline; })) {
     dates.push({ id: "official", label: "Application deadline", campus: "", date: uni.deadline,
       type: "deadline", sourceUrl: (uni.sources && uni.sources[0]) || "", approximate: false });
   }
@@ -538,16 +560,15 @@ tabButtons.forEach(function (button) {
 // =========================================================
 // 5. THE 3D GLOBE (using the Globe.gl library)
 //
-// Every university with a map position is a pin on a spinning globe.
-// Pin colors:
-//   gold   = your first choice (star it on its details card)
-//   red    = your date is under 15 days away, or overdue (see getMyDate)
-//   orange = everything else
-// Click a pin to fly to it and open its details card. The selected
-// university gets pulsing rings around it.
+// A dark, slowly spinning globe with glowing dots for your universities.
+// Dot colors (same as the legend):
+//   gold = your first choice (star it on its details card)
+//   red  = your date is under 15 days away, or overdue (see getMyDate)
+//   blue = everything else
+// Click a dot to fly to it and open its details card.
 //
-// The switches in the top-left corner (saved in this browser):
-//   Spin, Dark globe, Borders, Arcs from home
+// The gear button opens the settings (saved in this browser):
+//   Spin, Satellite view, Borders, Arcs from home, Glow
 // =========================================================
 
 let globe = null;
@@ -555,37 +576,41 @@ let globe = null;
 // Where the globe pictures and country shapes come from (exact versions,
 // so an update to the libraries can't change the site by surprise)
 const GLOBE_FILES = {
-  blueMarble: "https://unpkg.com/three-globe@2.45.2/example/img/earth-blue-marble.jpg",
-  dark: "https://unpkg.com/three-globe@2.45.2/example/img/earth-dark.jpg",
-  sky: "https://unpkg.com/three-globe@2.45.2/example/img/night-sky.png",
+  night: "https://unpkg.com/three-globe@2.45.2/example/img/earth-night.jpg",
+  satellite: "https://unpkg.com/three-globe@2.45.2/example/img/earth-blue-marble.jpg",
+  bumps: "https://unpkg.com/three-globe@2.45.2/example/img/earth-topology.png",
   borders: "https://unpkg.com/globe.gl@2.46.2/example/datasets/ne_110m_admin_0_countries.geojson",
 };
 
 const PIN_COLORS = {
   firstChoice: "#f5c542",   // gold
   urgent: "#f3646b",        // red (same red as the rest of the site)
-  normal: "#f2913c",        // orange
+  normal: "#38bdf8",        // bright blue
 };
 
-// The globe's switches. Missing ones get these defaults.
+// People who ask their device for less motion get a still globe by default
+const PREFERS_LESS_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// The globe's settings. Missing ones get these defaults.
 function getGlobeSettings() {
   const saved = DataStore.read(STORAGE_KEYS.globeSettings, {});
   return {
-    spin: saved.spin !== false,          // on unless you turned it off
-    dark: saved.dark === true,
+    spin: typeof saved.spin === "boolean" ? saved.spin : !PREFERS_LESS_MOTION,
+    satellite: saved.satellite === true,     // the realistic daytime picture instead of the night one
     borders: saved.borders === true,
     arcs: saved.arcs === true,
+    glow: saved.glow === true,               // cinematic bloom: off unless you turn it on (it's heavy on phones)
   };
 }
 
-// Letters like < and & must be escaped before going into a label's HTML
+// Letters like < and & must be escaped before going into HTML
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, function (character) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
   });
 }
 
-// A university -> one pin on the globe. Universities without a
+// A university -> one dot on the globe. Universities without a
 // map position are skipped.
 function toGlobePoint(uni) {
   if (!Number.isFinite(uni.lat) || !Number.isFinite(uni.lng)) return null;
@@ -609,22 +634,35 @@ function pinColor(point) {
   return PIN_COLORS.normal;
 }
 
-// The label shown when you hover over (or tap) a pin
-function pinLabel(point) {
-  return '<div class="pin-tooltip">' +
-    "<strong>" + (point.isFirstChoice ? "&#9733; " : "") + escapeHtml(point.name) + "</strong>" +
-    "<span>" + escapeHtml(point.place) + "</span>" +
-    '<span class="pin-tooltip-date">' + escapeHtml(point.myDate.main || "No date yet") + "</span>" +
-    (point.myDate.sub ? "<span>" + escapeHtml(point.myDate.sub) + "</span>" : "") +
-    "</div>";
+// One glowing dot. It's a normal web button, so it stays sharp at any
+// zoom, glows and pulses with CSS (style.css section 6), and opens the
+// details card when clicked. Its label shows on hover, and always when selected.
+function makeGlobePin(point) {
+  const pin = document.createElement("button");
+  pin.type = "button";
+  pin.className = "globe-pin" + (point.isSelected ? " is-selected" : "");
+  pin.style.setProperty("--pin-color", pinColor(point));
+  pin.setAttribute("aria-label", point.name + ", " + point.place + ". " + (point.myDate.main || "No date yet"));
+  pin.innerHTML =
+    '<span class="globe-pin-pulse"></span><span class="globe-pin-core"></span>' +
+    '<span class="globe-pin-label">' +
+      "<strong>" + (point.isFirstChoice ? "&#9733; " : "") + escapeHtml(point.name) + "</strong>" +
+      "<span>" + escapeHtml(point.myDate.main || point.place) + "</span>" +
+      (point.myDate.sub ? "<span>" + escapeHtml(point.myDate.sub) + "</span>" : "") +
+    "</span>";
+  pin.addEventListener("click", function (event) {
+    event.stopPropagation();
+    globe.pointOfView({ lat: point.lat, lng: point.lng, altitude: 0.8 }, 1500);
+    selectUniversity(point.id, false);       // opens the same details card as before
+  });
+  return pin;
 }
 
 const globeBox = document.getElementById("globe");
 
 // Show a message in the globe's place (no internet, or no 3D support)
 function showGlobeMessage(text) {
-  const message = makeElement("p", "muted globe-message", text);
-  globeBox.append(message);
+  globeBox.append(makeElement("p", "muted globe-message", text));
 }
 
 if (typeof Globe === "undefined") {
@@ -632,41 +670,62 @@ if (typeof Globe === "undefined") {
   showGlobeMessage("The globe needs an internet connection to load.");
 } else {
   try {
-    globe = Globe()(globeBox)
-      .backgroundColor("rgba(0,0,0,0)")          // let the page's dark background show
-      .backgroundImageUrl(GLOBE_FILES.sky)
+    globe = Globe({ animateIn: true })(globeBox)
+      .backgroundColor("rgba(0,0,0,0)")          // no starfield: the dark gradient behind shows through
+      .bumpImageUrl(GLOBE_FILES.bumps)           // mountains catch the light
       .showAtmosphere(true)
-      .atmosphereColor("#93a6ff")
-      .pointLat("lat")
-      .pointLng("lng")
-      .pointLabel(pinLabel)
-      .pointColor(pinColor)
-      .pointAltitude(function (point) { return point.isSelected ? 0.12 : 0.05; })
-      .pointRadius(function (point) { return point.isSelected ? 0.6 : 0.4; })
-      .pointsMerge(false)
-      .onPointClick(function (point) {
-        globe.pointOfView({ lat: point.lat, lng: point.lng, altitude: 0.8 }, 1500);
-        selectUniversity(point.id, false);       // opens the same details card as before
+      .atmosphereColor("#1e90ff")
+      .atmosphereAltitude(0.2)
+      // The glowing dots
+      .htmlElementsData([])
+      .htmlLat("lat")
+      .htmlLng("lng")
+      .htmlAltitude(0.01)
+      .htmlElement(makeGlobePin)
+      .htmlTransitionDuration(0)
+      // Soft rings spreading out from the selected university
+      .ringColor(function (point) {
+        const color = pinColor(point);
+        return function (t) { return color + Math.round((1 - t) * 200).toString(16).padStart(2, "0"); };
       })
-      // Pulsing rings around the selected university
-      .ringColor(function () { return function (t) { return "rgba(245, 197, 66, " + (1 - t) + ")"; }; })
-      .ringMaxRadius(3)
-      .ringPropagationSpeed(2)
-      .ringRepeatPeriod(900)
+      .ringMaxRadius(4)
+      .ringPropagationSpeed(1.5)
+      .ringRepeatPeriod(1400)
+      .ringAltitude(0.005)
       // Arcs from your home country
-      .arcColor(function () { return ["rgba(147, 166, 255, 0.9)", "rgba(242, 145, 60, 0.9)"]; })
-      .arcStroke(0.4)
-      .arcDashLength(0.4)
-      .arcDashGap(0.2)
-      .arcDashAnimateTime(3000)
-      // Country borders (only drawn when the switch is on)
+      .arcColor(function () { return ["rgba(56, 189, 248, 0.15)", "rgba(56, 189, 248, 0.9)"]; })
+      .arcStroke(0.35)
+      .arcAltitudeAutoScale(0.35)
+      .arcDashLength(0.5)
+      .arcDashGap(0.25)
+      .arcDashAnimateTime(4000)
+      // Country borders (only drawn when the setting is on)
       .polygonCapColor(function () { return "rgba(0, 0, 0, 0)"; })
       .polygonSideColor(function () { return "rgba(0, 0, 0, 0)"; })
-      .polygonStrokeColor(function () { return "rgba(233, 236, 243, 0.45)"; })
-      .polygonAltitude(0.004);
+      .polygonStrokeColor(function () { return "rgba(147, 166, 255, 0.35)"; })
+      .polygonAltitude(0.003);
 
-    globe.controls().autoRotateSpeed = 0.5;
-    globe.pointOfView({ lat: 30, lng: 10, altitude: 2.2 });
+    // Smooth, slow movement
+    const controls = globe.controls();
+    controls.autoRotateSpeed = 0.2;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Lighting: a soft fill light plus a "sun" from the top left, for depth
+    globe.lights().forEach(function (light) {
+      if (light.isAmbientLight) light.intensity = 1.1;
+      if (light.isDirectionalLight) {
+        light.intensity = 2.4;
+        light.position.set(-1, 1, 1.2);
+      }
+    });
+    const material = globe.globeMaterial();
+    material.bumpScale = 6;
+    material.shininess = 12;
+
+    // Sharp on retina screens, but not more than needed (saves battery)
+    globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    globe.pointOfView({ lat: 30, lng: 10, altitude: 2.3 });
   } catch (error) {
     // Happens on devices that can't draw 3D graphics (no WebGL)
     globe = null;
@@ -682,15 +741,49 @@ if (globe && "ResizeObserver" in window) {
   }).observe(globeBox);
 }
 
-// Turn the switches into globe settings
+// ----- Glow (bloom) -----
+// A soft cinematic glow on the brightest parts (city lights, the atmosphere).
+// It needs a few extra three.js files, loaded only the first time it's on.
+let bloomPass = null;
+let bloomLoading = false;
+function setGlow(on) {
+  if (!globe) return;
+  const composer = globe.postProcessingComposer();
+  if (!on) {
+    if (bloomPass) bloomPass.enabled = false;
+    return;
+  }
+  if (bloomPass) {
+    bloomPass.enabled = true;
+    return;
+  }
+  if (bloomLoading) return;
+  bloomLoading = true;
+  // "three" and "three/addons/" come from the import map in index.html
+  Promise.all([import("three"), import("three/addons/postprocessing/UnrealBloomPass.js")])
+    .then(function (modules) {
+      bloomPass = new modules[1].UnrealBloomPass(
+        new modules[0].Vector2(globeBox.clientWidth, globeBox.clientHeight),
+        0.45,    // strength: a soft glow, not a haze
+        0.3,     // radius
+        0.9);    // only the brightest parts glow (city lights, the atmosphere's rim)
+      composer.addPass(bloomPass);
+      bloomPass.enabled = getGlobeSettings().glow;
+    })
+    .catch(function () { /* no glow this time: the globe works fine without it */ })
+    .finally(function () { bloomLoading = false; });
+}
+
+// Turn the settings into globe settings
 let borderShapes = null;   // the country shapes, downloaded the first time Borders is turned on
 function applyGlobeSettings() {
   if (!globe) return;
   const settings = getGlobeSettings();
 
-  globe.globeImageUrl(settings.dark ? GLOBE_FILES.dark : GLOBE_FILES.blueMarble);
+  globe.globeImageUrl(settings.satellite ? GLOBE_FILES.satellite : GLOBE_FILES.night);
   // Spin, but not while a university's details are open
   globe.controls().autoRotate = settings.spin && selectedId === null;
+  setGlow(settings.glow);
 
   if (!settings.borders) {
     globe.polygonsData([]);
@@ -703,7 +796,7 @@ function applyGlobeSettings() {
         borderShapes = data.features;
         if (getGlobeSettings().borders) globe.polygonsData(borderShapes);
       })
-      .catch(function () { /* no borders this time; the switch can be tried again */ });
+      .catch(function () { /* no borders this time; the setting can be tried again */ });
   }
 
   drawArcs();
@@ -734,6 +827,7 @@ function getHomePlace(callback) {
 }
 
 // Arcs from your home country (Profile tab) to each university
+let globePoints = [];
 function drawArcs() {
   if (!globe) return;
   if (!getGlobeSettings().arcs) {
@@ -745,30 +839,28 @@ function drawArcs() {
       globe.arcsData([]);
       return;
     }
-    globe.arcsData(globe.pointsData().map(function (point) {
+    globe.arcsData(globePoints.map(function (point) {
       return { startLat: home.lat, startLng: home.lng, endLat: point.lat, endLng: point.lng };
     }));
   });
 }
 
-// Draw all the pins again from the universities list
+// Draw all the dots again from the universities list
 function drawPins() {
   if (!globe) return;
-  const points = universities.map(toGlobePoint).filter(Boolean);
-  globe.pointsData(points);
-  globe.ringsData(points.filter(function (point) { return point.isSelected; }));
+  globePoints = universities.map(toGlobePoint).filter(Boolean);
+  globe.htmlElementsData(globePoints);
+  globe.ringsData(globePoints.filter(function (point) { return point.isSelected; }));
   applyGlobeSettings();
 }
 
-// Turn the globe so the pins are in view
+// Turn the globe so the dots are in view
 function zoomToAllPins() {
-  if (!globe) return;
-  const points = globe.pointsData();
-  if (points.length === 0) return;
+  if (!globe || globePoints.length === 0) return;
 
-  // Point at the middle of all the pins
+  // Point at the middle of all the dots
   let x = 0, y = 0, z = 0;
-  points.forEach(function (point) {
+  globePoints.forEach(function (point) {
     const lat = point.lat * Math.PI / 180, lng = point.lng * Math.PI / 180;
     x += Math.cos(lat) * Math.cos(lng);
     y += Math.cos(lat) * Math.sin(lng);
@@ -776,13 +868,33 @@ function zoomToAllPins() {
   });
   const lng = Math.atan2(y, x) * 180 / Math.PI;
   const lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI;
-  globe.pointOfView({ lat: lat, lng: lng, altitude: points.length === 1 ? 1.2 : 1.8 }, 1000);
+  globe.pointOfView({ lat: lat, lng: lng, altitude: globePoints.length === 1 ? 1.2 : 1.8 }, 1600);
 }
 
-// The switches in the corner of the globe
+// ----- The gear button and its settings -----
+const globeSettingsButton = document.getElementById("globe-settings-button");
+const globeSettingsMenu = document.getElementById("globe-settings");
+
+function setSettingsOpen(open) {
+  globeSettingsMenu.hidden = !open;
+  globeSettingsButton.setAttribute("aria-expanded", String(open));
+}
+
+globeSettingsButton.disabled = !globe;
+globeSettingsButton.addEventListener("click", function (event) {
+  event.stopPropagation();
+  setSettingsOpen(globeSettingsMenu.hidden);
+});
+// Clicking anywhere else (or pressing Escape) closes it
+document.addEventListener("click", function (event) {
+  if (!globeSettingsMenu.hidden && !globeSettingsMenu.contains(event.target)) setSettingsOpen(false);
+});
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape" && !globeSettingsMenu.hidden) setSettingsOpen(false);
+});
+
 document.querySelectorAll("[data-globe-setting]").forEach(function (box) {
   box.checked = getGlobeSettings()[box.dataset.globeSetting];
-  box.disabled = !globe;
   box.addEventListener("change", function () {
     const settings = getGlobeSettings();
     settings[box.dataset.globeSetting] = box.checked;
@@ -2600,6 +2712,7 @@ if (universities.map(migrateUniversity).some(Boolean)) {
   DataStore.write(STORAGE_KEYS.universities, universities);
 }
 TimelineStore.migrate();   // the same for timeline entries saved by the old planner
+TimelineStore.markExistingGenerated(universities.map(function (uni) { return uni.id; }));
 
 updateAiState(); // show whether AI search is on
 showAcademicProfile(); // fill in your academic profile
