@@ -228,6 +228,8 @@ const ACADEMIC_FIELDS = {
 
 function showAcademicProfile() {
   const profile = getAcademicProfile();
+  // Tick the first welcome step once the start date is set
+  document.getElementById("welcome-step-start").classList.toggle("is-done", Boolean(profile.intendedStartDate));
   for (const key in ACADEMIC_FIELDS) {
     document.getElementById(ACADEMIC_FIELDS[key]).value = profile[key];
   }

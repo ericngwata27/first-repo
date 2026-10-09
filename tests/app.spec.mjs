@@ -73,6 +73,9 @@ test("loads without errors and shows the empty state", async ({ page }) => {
   await openWith(page, {});
   await expect(page.locator("#stat-total")).toHaveText("0");
   await expect(page.locator("#empty-list")).toBeVisible();
+  await expect(page.locator("#welcome")).toBeVisible();             // first-run welcome
+  await page.getByRole("button", { name: "Add a university and course" }).click();
+  await expect(page.locator("#name")).toBeFocused();
   await openTab(page, "Timeline");
   await expect(page.locator("#timeline-empty")).toBeVisible();
   expect(page.errors).toEqual([]);
@@ -86,6 +89,7 @@ test("adds a university using Wikidata's details", async ({ page }) => {
   await expect(page.locator("#uni-list .uni-card")).toHaveCount(1);
   await expect(page.locator("#uni-list")).toContainText("ESCP");
   await expect(page.locator("#stat-total")).toHaveText("1");
+  await expect(page.locator("#welcome")).toBeHidden();              // gone once you have one
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("future-planner-universities")));
   expect(saved[0]).toMatchObject({ name: "ESCP", city: "Paris", country: "France", lat: 48.85, website: "https://escp.eu/" });
   expect(saved[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);   // a UUID

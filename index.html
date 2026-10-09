@@ -78,11 +78,27 @@
 
       <!-- ----- Hero band: a headline beside a planet's glowing edge.
            Drawn entirely with CSS (style.css section 20), no images. ----- -->
-      <div class="hero">
+      <!-- The welcome band. Only shown until you add your first university
+           (universities.js adds "has-universities" to <body> then). -->
+      <div class="hero" id="welcome">
         <div class="hero-text">
           <p class="hero-eyebrow">Admissions planner</p>
           <h1 class="hero-title">Every deadline, <span>one globe.</span></h1>
-          <p class="hero-subtitle">Your universities, their rounds and your own plan, in one calm place.</p>
+          <p class="hero-subtitle">Your universities, their rounds and your own plan, in one calm place. Start in three steps:</p>
+          <ol class="welcome-steps">
+            <li id="welcome-step-start">
+              <button class="welcome-link" type="button" data-go="profile-start">Set your intended start date</button>
+              <span class="muted">so auto-fill finds the right year's deadlines</span>
+            </li>
+            <li>
+              <button class="welcome-link" type="button" data-go="name">Add a university and course</button>
+              <span class="muted">it appears on the globe</span>
+            </li>
+            <li>
+              <span class="welcome-text">Plan it on the Timeline</span>
+              <span class="muted">pick a deadline and drag the slider to your date</span>
+            </li>
+          </ol>
         </div>
         <div class="hero-planet" aria-hidden="true"></div>
       </div>

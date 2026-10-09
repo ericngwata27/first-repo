@@ -25,6 +25,7 @@
    21. Collapsible Timeline cards
    22. Your data (export / import)
    23. Loading, saved and error states
+   24. Welcome band (first run)
    ========================================================= */
 
 
@@ -3045,4 +3046,73 @@ body::before {
   .load-error {
     flex-wrap: wrap;
   }
+}
+
+/* Phones: text boxes at 16px so iPhones don't zoom in when you tap one,
+   and small buttons tall enough to tap comfortably */
+@media (max-width: 600px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .button-small {
+    min-height: 40px;
+  }
+
+  .data-card .button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+
+/* =========================================================
+   24. WELCOME BAND (first run)
+   The hero only shows until you add your first university.
+   ========================================================= */
+
+.is-loading .hero,
+.has-universities .hero {
+  display: none;
+}
+
+.welcome-steps {
+  margin: 16px 0 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+.welcome-steps li span.muted {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.welcome-link {
+  font: 600 0.95rem var(--font-body);
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.welcome-link:hover {
+  color: var(--ink);
+}
+
+.welcome-text {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* A tick once the start date is set */
+.welcome-steps li.is-done .welcome-link {
+  color: var(--green);
+  text-decoration: line-through;
 }

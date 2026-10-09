@@ -780,9 +780,23 @@ function drawStats() {
 
 // Update the pins, list, panel and stats all at once
 function redrawEverything() {
+  // The welcome band (index.html) is only for when you have no universities yet
+  document.body.classList.toggle("has-universities", state.universities.length > 0);
   drawPins();
   drawList();
   drawDetails();
   drawStats();
   refreshIcons();
 }
+
+
+// The welcome band's buttons: open the right tab and put the cursor in the box
+document.querySelectorAll(".welcome-link").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const box = document.getElementById(button.dataset.go);
+    const tab = box.closest(".tab-content");
+    document.querySelector('.tab[data-tab="' + tab.id + '"]').click();
+    box.scrollIntoView({ behavior: PREFERS_LESS_MOTION ? "auto" : "smooth", block: "center" });
+    box.focus({ preventScroll: true });
+  });
+});
