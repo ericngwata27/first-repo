@@ -2987,7 +2987,8 @@ body::before {
   background: var(--green);
 }
 
-.save-status[data-state="loading"] .save-dot {
+.save-status[data-state="loading"] .save-dot,
+.save-status[data-state="saving"] .save-dot {
   background: var(--ink-3);
   animation: save-pulse 1s ease-in-out infinite alternate;
 }
@@ -3038,7 +3039,8 @@ body::before {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .save-status[data-state="loading"] .save-dot {
+  .save-status[data-state="loading"] .save-dot,
+  .save-status[data-state="saving"] .save-dot {
     animation: none;
   }
 }

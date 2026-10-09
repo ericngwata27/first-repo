@@ -61,6 +61,8 @@ export { expect };
 // data = { universities: [...], timeline: {...}, profile: {...}, settings: {...} }
 export async function openWith(page, data = {}) {
   await page.goto("/");
+  // Wait until the page has finished loading (and syncing, if signed in)
+  await expect(page.locator("#save-status")).not.toHaveAttribute("data-state", "loading", { timeout: 15000 });
   await page.evaluate((data) => {
     localStorage.clear();
     // The globe stays still in tests, so its pins don't move under the mouse
@@ -104,4 +106,22 @@ export async function signInAs(page, email) {
       user: { id: "00000000-0000-4000-8000-000000000001", email, aud: "authenticated", role: "authenticated" },
     }));
   }, email);
+}
+
+// A pretend Supabase database for the signed-in person's planner.
+// `row` is what's already in their account (null = nothing yet).
+// Every save the website sends is kept in account.uploads.
+export async function fakeAccount(page, row = null) {
+  const account = { row, uploads: [] };
+  await page.route(/supabase\.co\/rest\/v1\/planner_data/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET") {
+      return route.fulfill({ json: account.row ? [account.row] : [] });
+    }
+    const body = request.postDataJSON();
+    account.row = { ...body, updated_at: new Date().toISOString() };
+    account.uploads.push(body);
+    return route.fulfill({ status: 201, json: [{ updated_at: account.row.updated_at }] });
+  });
+  return account;
 }

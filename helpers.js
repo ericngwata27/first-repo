@@ -5,7 +5,7 @@
 // Sections: 2. Small helpers, 4. Tabs, 12. Toasts
 // (The site's JavaScript is split into files that load in this order:
 //  store.js, helpers.js, dates.js, globe.js, autofill.js, universities.js,
-//  profile.js, main.js, timeline.js. The section numbers run across all of them.)
+//  profile.js, auth.js, sync.js, main.js, timeline.js. The section numbers run across all of them.)
 // =========================================================
 
 // ----- Page state (which university is selected or being edited) -----

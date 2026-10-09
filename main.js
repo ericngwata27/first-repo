@@ -5,7 +5,7 @@
 // Sections: 15. Start the app
 // (The site's JavaScript is split into files that load in this order:
 //  store.js, helpers.js, dates.js, globe.js, autofill.js, universities.js,
-//  profile.js, main.js, timeline.js. The section numbers run across all of them.)
+//  profile.js, auth.js, sync.js, main.js, timeline.js. The section numbers run across all of them.)
 // =========================================================
 
 // =========================================================
@@ -43,6 +43,14 @@ function upgradeOldData() {
   TimelineStore.markExistingGenerated(state.universities.map(function (uni) { return uni.id; }));
 }
 
+// Draw everything again after the whole planner changed
+// (signing in or out, or changes from another device)
+function showWholePlanner() {
+  upgradeOldData();
+  showEverything();
+  document.dispatchEvent(new CustomEvent("universities-changed"));   // the Timeline
+}
+
 // Fill in every part of the page from `state`
 function showEverything() {
   updateAiState();        // show whether AI search is on
@@ -63,7 +71,7 @@ const saveStatusText = document.getElementById("save-status-text");
 const failedParts = new Set();   // parts whose last save didn't work
 let warnedAboutSaving = false;
 
-// kind: "loading", "saved" or "error"
+// kind: "loading", "saving", "saved" or "error"
 function setSaveStatus(kind, text) {
   saveStatus.dataset.state = kind;
   saveStatusText.textContent = text;
@@ -73,9 +81,46 @@ function setSaveStatus(kind, text) {
 // if they aren't saved, nothing of yours is lost
 const CACHE_PARTS = ["searchCache", "homePlace"];
 
+// What "saved" means: in this browser, or in your account too
+function savedText() {
+  return cloudUser ? "Saved to your account" : "Saved";
+}
+
 document.addEventListener("data-saved", function (event) {
   failedParts.delete(event.detail);
-  if (failedParts.size === 0) setSaveStatus("saved", "Saved");
+  // (while signed in, the account's events below decide what the header says)
+  if (failedParts.size === 0 && !currentUser) setSaveStatus("saved", savedText());
+});
+
+// ----- Your account's copy (sync.js sends these) -----
+let warnedAboutAccount = false;
+
+document.addEventListener("cloud-saving", function () {
+  if (failedParts.size === 0) setSaveStatus("saving", "Saving…");
+});
+
+document.addEventListener("cloud-saved", function () {
+  warnedAboutAccount = false;
+  if (failedParts.size === 0) setSaveStatus("saved", savedText());
+});
+
+function warnNotSynced() {
+  setSaveStatus("error", "Not synced");
+  if (!warnedAboutAccount) {
+    warnedAboutAccount = true;
+    showToast("Couldn't reach your account. Your changes are saved in this browser and will be sent when you're back online.", "circle-alert");
+  }
+}
+document.addEventListener("cloud-save-failed", warnNotSynced);
+document.addEventListener("cloud-offline", warnNotSynced);
+
+// Coming back to this tab: pick up changes made on another device
+document.addEventListener("visibilitychange", async function () {
+  if (document.visibilityState !== "visible" || !dataLoaded) return;
+  if (await refreshFromAccount()) {
+    showWholePlanner();
+    showToast("Updated with changes from your other device.", "refresh-cw");
+  }
 });
 
 document.addEventListener("data-save-failed", function (event) {
@@ -110,7 +155,7 @@ async function startApp() {
   }
   upgradeOldData();
   showEverything();
-  setSaveStatus("saved", "Saved");
+  if (!currentUser || cloudUser) setSaveStatus("saved", savedText());   // (else it already says "Not synced")
   document.body.classList.remove("is-loading");
   return true;
 }

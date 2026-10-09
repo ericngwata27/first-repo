@@ -159,6 +159,15 @@ The database setup is in [`supabase/schema.sql`](supabase/schema.sql). There is 
 | `settings` | jsonb | `{ globe }` from section 7. Never the API key. |
 | `updated_at` | timestamptz | When it last changed |
 
-Row Level Security means each person can only read and change their own row. This keeps the website's `save("part")` a one-column update. Separate tables (universities, milestones, …) can come later if the planner ever needs to search or share across people.
+Row Level Security means each person can only read and change their own row.
+
+### How syncing works (`sync.js`)
+- **Signed out:** only the browser's copy (`localStorage`) is used.
+- **Signed in:** the browser keeps its copy, and every change is also sent to the account (the whole row, about 1 second after the last change).
+- **Opening the site signed in** loads the account's copy. If the account can't be reached within 6 seconds, the browser's copy is used and the header says **Not synced**.
+- **First time a browser connects** (`future-planner-owner` is empty): if the browser already has a planner, it's **merged** into the account: universities the account doesn't have are added, and empty profile boxes are filled. Nothing is thrown away.
+- **Sign out:** waiting changes are sent first, then the planner is removed from the browser (the API key and globe settings stay).
+- **Coming back to the tab** loads changes made on another device.
+- `future-planner-owner` (browser only) remembers which account the browser's copy belongs to, so one person's planner is never added to someone else's account. Separate tables (universities, milestones, …) can come later if the planner ever needs to search or share across people.
 
 Still to come: a shared `search_cache` table and a daily auto-fill limit, when auto-fill moves to the server.

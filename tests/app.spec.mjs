@@ -2,7 +2,7 @@
 //
 // Each test opens the website in a real (headless) Chrome, clicks around
 // like a person would, and checks what's on screen and what was saved.
-import { test, expect, openWith, openTab, signInAs, ESCP, ESADE } from "./helpers.mjs";
+import { test, expect, openWith, openTab, signInAs, fakeAccount, ESCP, ESADE } from "./helpers.mjs";
 
 // ----- Fake answers for the outside services used when adding a university -----
 
@@ -308,5 +308,90 @@ test("a signed-in person sees their email and can sign out", async ({ page }) =>
   await button.click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(button).toHaveText("Sign in");
+  expect(page.errors).toEqual([]);
+});
+
+
+// ----- Saving to your account (sync.js) -----
+
+const accountRow = (universities) => ({
+  user_id: "00000000-0000-4000-8000-000000000001", universities, timeline: {},
+  profile: {}, academic_profile: {}, settings: {}, updated_at: "2026-10-01T10:00:00Z",
+});
+
+test("signed in, your account's planner is loaded", async ({ page }) => {
+  await fakeAccount(page, accountRow([ESCP]));
+  await signInAs(page, "student@example.com");
+  await openWith(page, {});
+  await expect(page.locator("#uni-list")).toContainText("ESCP Business School");
+  await expect(page.locator("#save-status")).toHaveText("Saved to your account");
+  expect(page.errors).toEqual([]);
+});
+
+test("the first sign-in adds this browser's planner to the account", async ({ page }) => {
+  const account = await fakeAccount(page, accountRow([ESCP]));
+  await signInAs(page, "student@example.com");
+  await openWith(page, { universities: [ESADE] });      // this browser has Esade
+  await expect(page.locator("#uni-list .uni-card")).toHaveCount(2);   // both are kept
+  await expect.poll(() => account.row.universities.map((uni) => uni.name).sort())
+    .toEqual(["ESCP Business School", "Esade"]);
+  expect(page.errors).toEqual([]);
+});
+
+test("a new account gets this browser's planner", async ({ page }) => {
+  const account = await fakeAccount(page, null);
+  await openWith(page, { universities: [ESADE] });      // used the site signed out
+  expect(account.uploads).toEqual([]);                  // nothing is sent while signed out
+  await signInAs(page, "student@example.com");          // then signs in
+  await page.reload();
+  await expect.poll(() => account.row && account.row.universities.map((uni) => uni.name)).toEqual(["Esade"]);
+  expect(page.errors).toEqual([]);
+});
+
+test("changes are sent to your account", async ({ page }) => {
+  const account = await fakeAccount(page, accountRow([ESCP]));
+  await signInAs(page, "student@example.com");
+  await openWith(page, {});
+  await openTab(page, "Profile");
+  await page.fill("#profile-personal", "I love economics.");
+  await expect.poll(() => account.row.profile.personal).toBe("I love economics.");
+  await expect(page.locator("#save-status")).toHaveText("Saved to your account");
+  expect(page.errors).toEqual([]);
+});
+
+test("signing out removes the planner from this browser", async ({ page }) => {
+  await page.route(/supabase\.co\/auth\/v1\/logout/, (route) => route.fulfill({ status: 204, body: "" }));
+  await fakeAccount(page, accountRow([ESCP]));
+  await signInAs(page, "student@example.com");
+  await openWith(page, {});
+  await expect(page.locator("#uni-list .uni-card")).toHaveCount(1);
+  await page.locator("#account-button").click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.locator("#uni-list .uni-card")).toHaveCount(0);
+  const saved = await page.evaluate(() => localStorage.getItem("future-planner-universities"));
+  expect(JSON.parse(saved)).toEqual([]);
+  expect(page.errors).toEqual([]);
+});
+
+test("on a new device, your Timeline comes from the account unchanged", async ({ page }) => {
+  // A university whose timeline was never generated, opened on a fresh browser
+  const row = { ...accountRow([ESCP]), timeline: { 1: { status: "applying" } } };
+  await fakeAccount(page, row);
+  await signInAs(page, "student@example.com");
+  await page.goto("/");
+  await page.evaluate(() => localStorage.removeItem("future-planner-timeline-version"));
+  await page.reload();
+  await openTab(page, "Timeline");
+  await card(page, 1).locator(".tl-summary").click();
+  await expect(card(page, 1)).toContainText("Timeline not generated yet");
+  expect(page.errors).toEqual([]);
+});
+
+test("if your account can't be reached, the header says Not synced", async ({ page }) => {
+  await page.route(/supabase\.co\/rest\/v1\//, (route) => route.fulfill({ status: 503, json: { message: "down" } }));
+  await signInAs(page, "student@example.com");
+  await openWith(page, { universities: [ESCP] });
+  await expect(page.locator("#save-status")).toHaveText("Not synced", { timeout: 10000 });   // gives up after 6 s
+  await expect(page.locator("#uni-list .uni-card")).toHaveCount(1);   // this browser's copy still works
   expect(page.errors).toEqual([]);
 });
