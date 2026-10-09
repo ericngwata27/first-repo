@@ -11,9 +11,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Figtree:wght@400;500;600&display=swap">
 
-  <!-- Leaflet: the map library's stylesheet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
   <!-- Our own stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -72,10 +69,18 @@
         </div>
       </div>
 
-      <!-- ----- The map, with the details panel sliding in on top of it ----- -->
+      <!-- ----- The 3D globe, with the details panel sliding in on top of it ----- -->
       <div class="map-wrap">
-        <!-- Leaflet draws the map inside this empty div -->
-        <div id="map"></div>
+        <!-- Globe.gl draws the globe inside this empty div -->
+        <div id="globe"></div>
+
+        <!-- Switches for the globe (saved in this browser) -->
+        <div class="globe-controls" role="group" aria-label="Globe options">
+          <label><input type="checkbox" data-globe-setting="spin"> Spin</label>
+          <label><input type="checkbox" data-globe-setting="dark"> Dark globe</label>
+          <label><input type="checkbox" data-globe-setting="borders"> Borders</label>
+          <label><input type="checkbox" data-globe-setting="arcs"> Arcs from home</label>
+        </div>
 
         <!-- Details of the selected university. script.js fills in .panel-body -->
         <aside id="details-panel" class="details-panel" aria-live="polite">
@@ -87,10 +92,9 @@
 
         <!-- Legend explaining the pin colors -->
         <div class="legend">
-          <span><i class="dot dot-later"></i> 45+ days</span>
-          <span><i class="dot dot-soon"></i> 15–45 days</span>
+          <span><i class="dot dot-first"></i> First choice</span>
           <span><i class="dot dot-urgent"></i> Under 15 days / overdue</span>
-          <span><i class="dot dot-none"></i> Closed / no date</span>
+          <span><i class="dot dot-normal"></i> Other</span>
         </div>
       </div>
 
@@ -447,7 +451,7 @@
   <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
   <!-- Libraries: they must load BEFORE script.js uses them -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>   <!-- the map -->
+  <script src="https://unpkg.com/globe.gl@2.46.2/dist/globe.gl.min.js"></script>   <!-- the 3D globe -->
   <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script> <!-- the icons -->
 
   <!-- Our own code -->

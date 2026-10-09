@@ -40,6 +40,8 @@ const STORAGE_KEYS = {
   searchCache: "future-planner-search-cache",
   apiKey: "future-planner-claude-key",
   academicProfile: "future-planner-academic-profile",   // start date, grade, school system, country
+  globeSettings: "future-planner-globe-settings",       // the globe's on/off switches
+  homePlace: "future-planner-home-place",               // where your home country is on the globe
   profilePrefix: "future-planner-profile-",  // + "personal", "statement", ...
 };
 
@@ -517,8 +519,11 @@ tabButtons.forEach(function (button) {
     });
     document.getElementById(button.dataset.tab).hidden = false;
 
-    // A map that was hidden doesn't know its size, so we ask it to re-measure
-    if (map) map.invalidateSize();
+    // Pause the globe while its tab is hidden (saves battery), and resume it after
+    if (globe) {
+      if (button.dataset.tab === "universities-tab") globe.resumeAnimation();
+      else globe.pauseAnimation();
+    }
 
     // Let other pages know which tab opened (the Timeline refreshes itself)
     document.dispatchEvent(new CustomEvent("tab-opened", { detail: button.dataset.tab }));
@@ -531,117 +536,263 @@ tabButtons.forEach(function (button) {
 
 
 // =========================================================
-// 5. THE MAP (using the Leaflet library)
+// 5. THE 3D GLOBE (using the Globe.gl library)
+//
+// Every university with a map position is a pin on a spinning globe.
+// Pin colors:
+//   gold   = your first choice (star it on its details card)
+//   red    = your date is under 15 days away, or overdue (see getMyDate)
+//   orange = everything else
+// Click a pin to fly to it and open its details card. The selected
+// university gets pulsing rings around it.
+//
+// The switches in the top-left corner (saved in this browser):
+//   Spin, Dark globe, Borders, Arcs from home
 // =========================================================
 
-let map = null;
-const markers = {}; // each pin, stored by university id
+let globe = null;
 
-// The graduation cap drawing used inside each pin
-const CAP_ICON =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/>' +
-  '<path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>';
+// Where the globe pictures and country shapes come from (exact versions,
+// so an update to the libraries can't change the site by surprise)
+const GLOBE_FILES = {
+  blueMarble: "https://unpkg.com/three-globe@2.45.2/example/img/earth-blue-marble.jpg",
+  dark: "https://unpkg.com/three-globe@2.45.2/example/img/earth-dark.jpg",
+  sky: "https://unpkg.com/three-globe@2.45.2/example/img/night-sky.png",
+  borders: "https://unpkg.com/globe.gl@2.46.2/example/datasets/ne_110m_admin_0_countries.geojson",
+};
 
-if (typeof L === "undefined") {
-  // Leaflet loads from the internet. If you're offline, show a message instead.
-  const message = makeElement("p", "muted", "The map needs an internet connection to load.");
-  message.style.padding = "24px";
-  document.getElementById("map").appendChild(message);
+const PIN_COLORS = {
+  firstChoice: "#f5c542",   // gold
+  urgent: "#f3646b",        // red (same red as the rest of the site)
+  normal: "#f2913c",        // orange
+};
+
+// The globe's switches. Missing ones get these defaults.
+function getGlobeSettings() {
+  const saved = DataStore.read(STORAGE_KEYS.globeSettings, {});
+  return {
+    spin: saved.spin !== false,          // on unless you turned it off
+    dark: saved.dark === true,
+    borders: saved.borders === true,
+    arcs: saved.arcs === true,
+  };
+}
+
+// Letters like < and & must be escaped before going into a label's HTML
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, function (character) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
+  });
+}
+
+// A university -> one pin on the globe. Universities without a
+// map position are skipped.
+function toGlobePoint(uni) {
+  if (!Number.isFinite(uni.lat) || !Number.isFinite(uni.lng)) return null;
+  const myDate = getMyDate(uni);
+  return {
+    id: uni.id,
+    name: uni.name,
+    lat: uni.lat,
+    lng: uni.lng,
+    isFirstChoice: Boolean(uni.firstChoice),
+    isUrgent: getMyDateStatus(myDate).level === "urgent",
+    isSelected: uni.id === selectedId,
+    myDate: describeMyDate(myDate),
+    place: uni.city + ", " + uni.country,
+  };
+}
+
+function pinColor(point) {
+  if (point.isFirstChoice) return PIN_COLORS.firstChoice;
+  if (point.isUrgent) return PIN_COLORS.urgent;
+  return PIN_COLORS.normal;
+}
+
+// The label shown when you hover over (or tap) a pin
+function pinLabel(point) {
+  return '<div class="pin-tooltip">' +
+    "<strong>" + (point.isFirstChoice ? "&#9733; " : "") + escapeHtml(point.name) + "</strong>" +
+    "<span>" + escapeHtml(point.place) + "</span>" +
+    '<span class="pin-tooltip-date">' + escapeHtml(point.myDate.main || "No date yet") + "</span>" +
+    (point.myDate.sub ? "<span>" + escapeHtml(point.myDate.sub) + "</span>" : "") +
+    "</div>";
+}
+
+const globeBox = document.getElementById("globe");
+
+// Show a message in the globe's place (no internet, or no 3D support)
+function showGlobeMessage(text) {
+  const message = makeElement("p", "muted globe-message", text);
+  globeBox.append(message);
+}
+
+if (typeof Globe === "undefined") {
+  // Globe.gl loads from the internet. If you're offline, show a message instead.
+  showGlobeMessage("The globe needs an internet connection to load.");
 } else {
-  // Start with a view of the whole world: [latitude, longitude], zoom level 2
-  map = L.map("map", { worldCopyJump: true, zoomControl: false }).setView([30, 10], 2);
+  try {
+    globe = Globe()(globeBox)
+      .backgroundColor("rgba(0,0,0,0)")          // let the page's dark background show
+      .backgroundImageUrl(GLOBE_FILES.sky)
+      .showAtmosphere(true)
+      .atmosphereColor("#93a6ff")
+      .pointLat("lat")
+      .pointLng("lng")
+      .pointLabel(pinLabel)
+      .pointColor(pinColor)
+      .pointAltitude(function (point) { return point.isSelected ? 0.12 : 0.05; })
+      .pointRadius(function (point) { return point.isSelected ? 0.6 : 0.4; })
+      .pointsMerge(false)
+      .onPointClick(function (point) {
+        globe.pointOfView({ lat: point.lat, lng: point.lng, altitude: 0.8 }, 1500);
+        selectUniversity(point.id, false);       // opens the same details card as before
+      })
+      // Pulsing rings around the selected university
+      .ringColor(function () { return function (t) { return "rgba(245, 197, 66, " + (1 - t) + ")"; }; })
+      .ringMaxRadius(3)
+      .ringPropagationSpeed(2)
+      .ringRepeatPeriod(900)
+      // Arcs from your home country
+      .arcColor(function () { return ["rgba(147, 166, 255, 0.9)", "rgba(242, 145, 60, 0.9)"]; })
+      .arcStroke(0.4)
+      .arcDashLength(0.4)
+      .arcDashGap(0.2)
+      .arcDashAnimateTime(3000)
+      // Country borders (only drawn when the switch is on)
+      .polygonCapColor(function () { return "rgba(0, 0, 0, 0)"; })
+      .polygonSideColor(function () { return "rgba(0, 0, 0, 0)"; })
+      .polygonStrokeColor(function () { return "rgba(233, 236, 243, 0.45)"; })
+      .polygonAltitude(0.004);
 
-  // Zoom buttons in the bottom-right, out of the details panel's way
-  L.control.zoom({ position: "bottomright" }).addTo(map);
-
-  // Map pictures ("tiles") from Esri. Free, and no API key needed.
-  const esriTiles = "https://server.arcgisonline.com/ArcGIS/rest/services/";
-
-  const satelliteMap = L.tileLayer(esriTiles + "World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics",
-    maxZoom: 19,
-    className: "tiles-satellite", // lets style.css darken it slightly
-  });
-
-  const streetMap = L.tileLayer(esriTiles + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
-    attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors",
-    maxZoom: 19,
-    className: "tiles-street", // lets style.css turn it dark
-  });
-
-  // NEW: country and city names drawn on top of the satellite photos,
-  // since satellite pictures on their own have no labels
-  const placeNames = L.tileLayer(esriTiles + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 19,
-  });
-
-  // CHANGED: satellite view (with place names) is now the default
-  satelliteMap.addTo(map);
-  placeNames.addTo(map);
-
-  // Button to switch map styles and turn place names on or off (top-left corner)
-  L.control.layers(
-    { "Satellite": satelliteMap, "Street map (dark)": streetMap },
-    { "Place names": placeNames },
-    { position: "topleft" }
-  ).addTo(map);
+    globe.controls().autoRotateSpeed = 0.5;
+    globe.pointOfView({ lat: 30, lng: 10, altitude: 2.2 });
+  } catch (error) {
+    // Happens on devices that can't draw 3D graphics (no WebGL)
+    globe = null;
+    globeBox.innerHTML = "";
+    showGlobeMessage("Your browser can't show the 3D globe. Your universities are still in the list below.");
+  }
 }
 
-// Build a pin. Its color comes from your date (see getMyDate).
-function makePinIcon(uni, isSelected) {
-  const level = getMyDateStatus(getMyDate(uni)).level;
-  return L.divIcon({
-    className: "", // stops Leaflet adding its default white square
-    html: '<div class="pin level-' + level +
-      (isSelected ? " is-selected" : "") +
-      (uni.id === newestId ? " is-new" : "") + '">' + CAP_ICON + "</div>",
-    iconSize: [34, 34],
-    iconAnchor: [17, 40], // the tip of the pin touches the location
+// Keep the globe the same size as its box (window resizes, phones turning)
+if (globe && "ResizeObserver" in window) {
+  new ResizeObserver(function () {
+    if (globeBox.clientWidth > 0) globe.width(globeBox.clientWidth).height(globeBox.clientHeight);
+  }).observe(globeBox);
+}
+
+// Turn the switches into globe settings
+let borderShapes = null;   // the country shapes, downloaded the first time Borders is turned on
+function applyGlobeSettings() {
+  if (!globe) return;
+  const settings = getGlobeSettings();
+
+  globe.globeImageUrl(settings.dark ? GLOBE_FILES.dark : GLOBE_FILES.blueMarble);
+  // Spin, but not while a university's details are open
+  globe.controls().autoRotate = settings.spin && selectedId === null;
+
+  if (!settings.borders) {
+    globe.polygonsData([]);
+  } else if (borderShapes) {
+    globe.polygonsData(borderShapes);
+  } else {
+    fetch(GLOBE_FILES.borders)
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        borderShapes = data.features;
+        if (getGlobeSettings().borders) globe.polygonsData(borderShapes);
+      })
+      .catch(function () { /* no borders this time; the switch can be tried again */ });
+  }
+
+  drawArcs();
+}
+
+// Where your home country is, found once with the map search (section 6)
+// and remembered. Returns null until it's known.
+let homeLookupRunning = false;
+function getHomePlace(callback) {
+  const country = getAcademicProfile().countryOfResidence;
+  if (!country) return callback(null);
+
+  const saved = DataStore.read(STORAGE_KEYS.homePlace, null);
+  if (saved && saved.country === country) return callback(saved);
+
+  if (homeLookupRunning) return callback(null);
+  homeLookupRunning = true;
+  fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(country))
+    .then(function (response) { return response.json(); })
+    .then(function (results) {
+      if (!results[0]) return callback(null);
+      const place = { country: country, lat: Number(results[0].lat), lng: Number(results[0].lon) };
+      DataStore.write(STORAGE_KEYS.homePlace, place);
+      callback(place);
+    })
+    .catch(function () { callback(null); })
+    .finally(function () { homeLookupRunning = false; });
+}
+
+// Arcs from your home country (Profile tab) to each university
+function drawArcs() {
+  if (!globe) return;
+  if (!getGlobeSettings().arcs) {
+    globe.arcsData([]);
+    return;
+  }
+  getHomePlace(function (home) {
+    if (!home || !getGlobeSettings().arcs) {
+      globe.arcsData([]);
+      return;
+    }
+    globe.arcsData(globe.pointsData().map(function (point) {
+      return { startLat: home.lat, startLng: home.lng, endLat: point.lat, endLng: point.lng };
+    }));
   });
 }
 
-// Remove all pins and draw them again from the universities list
+// Draw all the pins again from the universities list
 function drawPins() {
-  if (!map) return;
-
-  Object.keys(markers).forEach(function (id) {
-    markers[id].remove();
-    delete markers[id];
-  });
-
-  universities.forEach(function (uni) {
-    const marker = L.marker([uni.lat, uni.lng], {
-      icon: makePinIcon(uni, uni.id === selectedId),
-      riseOnHover: true,                    // hovered pin comes to the front
-      zIndexOffset: uni.id === selectedId ? 1000 : 0,
-    }).addTo(map);
-
-    // Tooltip shown on hover: name, city, your date and the official deadline
-    const myDate = describeMyDate(getMyDate(uni));
-    const tooltip = document.createElement("div");
-    tooltip.append(makeElement("strong", "", uni.name), makeElement("span", "", uni.city + ", " + uni.country),
-      makeElement("span", "pin-tooltip-date", myDate.main || "No date yet"));
-    if (myDate.sub) tooltip.append(makeElement("span", "pin-tooltip-sub", myDate.sub));
-    marker.bindTooltip(tooltip, { direction: "top", offset: [0, -42], className: "pin-tooltip" });
-
-    marker.on("click", function () {
-      selectUniversity(uni.id, false);
-    });
-
-    markers[uni.id] = marker;
-  });
+  if (!globe) return;
+  const points = universities.map(toGlobePoint).filter(Boolean);
+  globe.pointsData(points);
+  globe.ringsData(points.filter(function (point) { return point.isSelected; }));
+  applyGlobeSettings();
 }
 
-// Zoom the map so every pin fits on screen
+// Turn the globe so the pins are in view
 function zoomToAllPins() {
-  if (!map || universities.length === 0) return;
+  if (!globe) return;
+  const points = globe.pointsData();
+  if (points.length === 0) return;
 
-  const points = universities.map(function (uni) {
-    return [uni.lat, uni.lng];
+  // Point at the middle of all the pins
+  let x = 0, y = 0, z = 0;
+  points.forEach(function (point) {
+    const lat = point.lat * Math.PI / 180, lng = point.lng * Math.PI / 180;
+    x += Math.cos(lat) * Math.cos(lng);
+    y += Math.cos(lat) * Math.sin(lng);
+    z += Math.sin(lat);
   });
-  map.fitBounds(points, { padding: [60, 60], maxZoom: 6 });
+  const lng = Math.atan2(y, x) * 180 / Math.PI;
+  const lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI;
+  globe.pointOfView({ lat: lat, lng: lng, altitude: points.length === 1 ? 1.2 : 1.8 }, 1000);
 }
+
+// The switches in the corner of the globe
+document.querySelectorAll("[data-globe-setting]").forEach(function (box) {
+  box.checked = getGlobeSettings()[box.dataset.globeSetting];
+  box.disabled = !globe;
+  box.addEventListener("change", function () {
+    const settings = getGlobeSettings();
+    settings[box.dataset.globeSetting] = box.checked;
+    DataStore.write(STORAGE_KEYS.globeSettings, settings);
+    applyGlobeSettings();
+    if (box.dataset.globeSetting === "arcs" && box.checked && !getAcademicProfile().countryOfResidence) {
+      showToast("Add your country of residence on the Profile tab to see arcs from home.", "circle-alert");
+    }
+  });
+});
 
 
 // =========================================================
@@ -2007,7 +2158,7 @@ function drawList() {
 
     // The clickable main part: name, course, location, deadline
     const main = makeElement("button", "uni-card-main");
-    main.title = "Show on map";
+    main.title = "Show on the globe";
 
     const meta = makeElement("div", "uni-meta");
     const course = makeElement("span");
@@ -2263,7 +2414,18 @@ function drawDetails() {
   deleteButton.addEventListener("click", function () {
     deleteUniversity(uni.id);
   });
-  actions.append(editButton, deleteButton);
+  // Star it as your first choice (gold pin on the globe). Only one at a time.
+  const starButton = makeElement("button", "button" + (uni.firstChoice ? " is-first-choice" : ""));
+  starButton.setAttribute("aria-pressed", String(Boolean(uni.firstChoice)));
+  starButton.append(makeIcon("star"), uni.firstChoice ? "First choice" : "Mark as first choice");
+  starButton.addEventListener("click", function () {
+    const makeFirst = !uni.firstChoice;
+    universities.forEach(function (other) { delete other.firstChoice; });
+    if (makeFirst) uni.firstChoice = true;
+    saveUniversities();
+    redrawEverything();
+  });
+  actions.append(starButton, editButton, deleteButton);
 
   panelBody.append(
     statusRow,
@@ -2284,7 +2446,7 @@ function drawDetails() {
 }
 
 // Select a university: highlight it everywhere and show its details.
-// If flyToIt is true, the map glides over to its pin.
+// If flyToIt is true, the globe turns to its pin.
 function selectUniversity(id, flyToIt) {
   selectedId = id;
   redrawEverything();
@@ -2292,8 +2454,8 @@ function selectUniversity(id, flyToIt) {
   const uni = findUniversity(id);
   if (!uni) return;
 
-  if (map && flyToIt) {
-    map.flyTo([uni.lat, uni.lng], 6, { duration: 0.9 });
+  if (globe && flyToIt && Number.isFinite(uni.lat)) {
+    globe.pointOfView({ lat: uni.lat, lng: uni.lng, altitude: 0.8 }, 1500);
   }
 
   // On small screens the panel is under the map, so scroll to it
