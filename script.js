@@ -113,6 +113,10 @@ function saveUniversities() {
 //   deadline: "2027-01-15",             year-month-day, or "" if not set
 //   requirements: "AAA at A-level",
 //   applicationInfo: "Apply through UCAS",
+//   applicationDates: [                 every date auto-fill found (see section 7)
+//     { label: "Round 1", campus: "Paris", date: "2026-11-18", type: "deadline", sourceUrl: "https://..." }
+//   ],
+//   rolling: false,                     true if the university uses rolling admissions
 //   pros: "Beautiful city\nStrong CS department",
 //   cons: "Cold winters",
 //   lat: 55.94, lng: -3.18              where the pin goes on the map
@@ -548,40 +552,37 @@ const SEARCH_INSTRUCTIONS = [
   "How to Apply:",
   "Course Description:",
   "Important Notes:",
-  "Admissions Type:",
-  "Admissions Rounds:",
-  "Recommended Window:",
+  "Application Dates:",
+  "Rolling Admissions:",
   "",
   "Rules:",
-  "- Keep each section short (1-2 sentences max).",
+  "- Keep each section short (1-2 sentences max). Application Dates is the exception: list every date.",
   "- Do NOT include commentary, disclaimers, or search-limit notes.",
   "- Do NOT explain what you did or why.",
+  "- Do NOT recommend when to apply.",
   "- If information is missing, write \"Not available\".",
-  "- Never repeat the same data in multiple sections. Exception: Admissions Rounds lists every round, even if one of them is also the Application Deadline.",
+  "- Never repeat the same data in multiple sections. Exception: Application Dates lists every date, even if one of them is also the Application Deadline.",
   "- Prioritize official admissions and course pages.",
   "- Stop reading after 3 pages.",
-  "- Keep total output under 1600 characters.",
+  "- Keep total output under 3000 characters.",
   "- Use plain text only - no markdown, no bullet points, no extra formatting.",
-  "- Application Deadline: give the next deadline that hasn't passed yet, written with day, month and year (for example 14 January 2027). " +
-    "Always give a date, even for rolling admissions (for example: 30 June 2027 (rolling until then)). " +
-    "If the page only gives a month, use the last day of that month.",
-  "- Admissions Type: write exactly one of: rolling, rounds, single deadline, equal consideration, unknown. " +
-    "rolling = applications are reviewed as they arrive or places are filled in order. " +
-    "rounds = several named rounds or deadlines (Round 1, Early Decision, Early Action, Regular Decision, priority deadline). " +
-    "equal consideration = every application received by the deadline is treated the same (for example the UCAS equal consideration deadline). " +
-    "single deadline = just one deadline.",
-  "- Admissions Rounds: list every round in date order as 'Name - date', separated by semicolons " +
-    "(for example: Round 1 - 15 November 2026; Round 2 - 15 January 2027). Include the year when the page gives it. " +
-    "Never merge rounds into one. Write \"Not available\" if there are no named rounds. " +
-    "If rounds differ by campus, include ALL campuses and start each round with its campus and a colon " +
-    "(for example: Paris: Round 1 - 18 November 2026; Turin: Round 1 - 27 October 2026). Never leave out a campus.",
-  "- Intake: give deadlines and rounds only for the admissions cycle for the applicant's intended start date, never for an earlier or later intake.",
+  "- Never invent a day. If a page only gives a month, write just the month and year (for example: June 2027).",
+  "- Application Deadline: the next deadline that hasn't passed yet, with day, month and year (for example 14 January 2027).",
+  "- Application Dates: list EVERY application-related date, in date order, separated by semicolons. " +
+    "Write each one as: type | campus | name | date | page URL. " +
+    "type is one of: opens, deadline, decision, start, other. " +
+    "campus is the campus name, or - if the date is the same for every campus. " +
+    "name is short, for example: Round 1, Early deadline, Final deadline, Scholarship deadline, Round 1 results, Applications open, Course starts. " +
+    "page URL is the official page where you found the date. " +
+    "Include every round or stage, application opening dates, early or priority deadlines, final deadlines, scholarship deadlines, " +
+    "decision or result dates and the course start date. If dates differ by campus, include ALL campuses. " +
+    "Example: opens | - | Applications open | 1 September 2026 | https://www.example.edu/apply; " +
+    "deadline | Paris | Round 1 | 18 November 2026 | https://www.example.edu/dates",
+  "- Rolling Admissions: write yes if applications are reviewed as they arrive or places are filled in order, otherwise no.",
+  "- Intake: give dates only for the admissions cycle for the applicant's intended start date, never for an earlier or later intake.",
   "- School system: give Entry Requirements for the applicant's school system when the page lists them (for example the Abitur grade or IB points).",
   "- Country of residence: use it only for rules that depend on residence (such as fees or a separate application route). " +
     "Never use it to choose or leave out a campus.",
-  "- Important Notes: mention any signs of how competitive admission is (selectivity, interviews, admission tests, limited places).",
-  "- Recommended Window: copy the university's own advice about when to apply, in its own words " +
-    "(for example: Apply October-December because spaces fill progressively). Write \"Not available\" if it gives none.",
 ].join("\n");
 
 // The section names Claude uses, matched to our form's boxes
@@ -595,9 +596,8 @@ const SECTION_KEYS = {
   "how to apply": "applicationInfo",
   "course description": "courseDescription",
   "important notes": "notes",
-  "admissions type": "admissionsType",
-  "admissions rounds": "admissionsRounds",
-  "recommended window": "recommendedWindow",
+  "application dates": "applicationDates",
+  "rolling admissions": "rolling",
 };
 
 // Turn an error code from the Claude API into a message a person can act on
@@ -629,8 +629,10 @@ function parseSections(text) {
       currentKey = key;
       result[key] = match[2].trim();
     } else if (currentKey) {
-      // A line without a section name belongs to the section above it
-      result[currentKey] = (result[currentKey] + " " + line).trim();
+      // A line without a section name belongs to the section above it.
+      // (Application dates keep their line breaks: each line can be one date.)
+      const joiner = currentKey === "applicationDates" ? "\n" : " ";
+      result[currentKey] = (result[currentKey] + joiner + line).trim();
     }
   });
   return result;
@@ -729,26 +731,14 @@ function endOfMonthDate(text) {
   return year + "-" + String(month).padStart(2, "0") + "-" + String(lastDay.getDate()).padStart(2, "0");
 }
 
-// The admissions types we understand
-const ADMISSIONS_TYPES = ["rolling", "rounds", "singleDeadline", "equalConsideration", "unknown"];
-
-// "Equal consideration" -> "equalConsideration", anything unclear -> "unknown"
-function parseAdmissionsType(text) {
-  const value = (text || "").toLowerCase();
-  if (/rolling/.test(value)) return "rolling";
-  if (/equal consideration/.test(value)) return "equalConsideration";
-  if (/single/.test(value)) return "singleDeadline";
-  if (/round/.test(value)) return "rounds";
-  return "unknown";
-}
-
 // Take the date out of a round's text and tidy what's left into a name
 function roundLabel(item) {
   const month = "(?:" + MONTH_NAMES + ")\\b\\.?";
   const datePatterns = [
     new RegExp("\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?" + month + ",?(?:\\s+\\d{4})?", "gi"),   // 18 November (2026)
-    new RegExp(month + "\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?", "gi"),                     // November 18 (, 2026)
+    new RegExp(month + "\\s+\\d{1,2}(?!\\d)(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?", "gi"),               // November 18 (, 2026)
     /\d{4}-\d{2}-\d{2}/g,                                                                    // 2026-11-18
+    new RegExp(month + "\\s+\\d{4}", "gi"),                                                // November 2026 (month only)
   ];
   let label = item;
   datePatterns.forEach(function (pattern) { label = label.replace(pattern, " "); });
@@ -761,9 +751,6 @@ function roundLabel(item) {
   return (label || "Round").slice(0, 40);
 }
 
-// "Round 1 - 15 November 2026; Round 2 - 15 January 2027"
-//   -> [{ label: "Round 1", date: "2026-11-15" }, { label: "Round 2", date: "2027-01-15" }]
-// Rounds without a readable date are left out.
 // Words that start a round's name ("Round 1", "Early Decision", ...).
 // Anything written before them can be the campus ("Paris Round 1").
 // "deadline" isn't one of them: in "Application deadline" or
@@ -771,7 +758,7 @@ function roundLabel(item) {
 const ROUND_WORDS = /\b(?:round|stage|phase|early decision|early action|restrictive early action|regular decision)\b/i;
 
 // Words that describe applicants or deadlines, never a campus
-const NOT_CAMPUS = /\b(?:applicants?|students?|international|domestic|home|overseas|eu|non-eu|deadline|application|early bird|priority|regular|main|final|general|standard)\b/i;
+const NOT_CAMPUS = /\b(?:applicants?|students?|international|domestic|home|overseas|eu|non-eu|deadlines?|applications?|early bird|priority|regular|main|final|general|standard|opens?|opening|starts?|results?|decisions?|course|intake|scholarships?)\b/i;
 
 // "Paris: Round 1 - 18 November" -> { campus: "Paris", rest: "Round 1 - 18 November" }
 // "Paris/Madrid Round 1 - 18 Nov" -> { campus: "Paris/Madrid", rest: "Round 1 - 18 Nov" }
@@ -799,26 +786,163 @@ function splitCampus(item) {
   return { campus: "", rest: text };
 }
 
-// "Paris: Round 1 - 15 November 2026; Turin: Round 1 - 27 October 2026"
-//   -> [{ campus: "Paris", label: "Round 1", date: "2026-11-15" },
-//       { campus: "Turin", label: "Round 1", date: "2026-10-27" }]
-// Rounds without a readable date are left out. Every campus is kept.
-function parseRoundsList(text) {
-  const rounds = [];
-  cleanAnswer(text).split(/;|\n|\|/).forEach(function (item) {
-    const date = parseLooseDate(item);
-    if (!date) return;
+// ----- Application dates -----
+// Auto-fill collects every date it finds. Each one is saved like this:
+//   { label: "Round 1", campus: "Paris", date: "2026-11-18",
+//     type: "deadline", sourceUrl: "https://..." }
+// type is one of DATE_TYPES. When only the month is known, date is
+// "2027-06" and approximate is true (we never make up a day).
 
-    const parts = splitCampus(item);
-    const campus = parts.campus.slice(0, 40);
-    const label = roundLabel(parts.rest);   // everything except the date
+const DATE_TYPES = ["opens", "deadline", "decision", "start", "other"];
 
-    const duplicate = rounds.some(function (r) {
-      return r.campus.toLowerCase() === campus.toLowerCase() && r.label.toLowerCase() === label.toLowerCase() && r.date === date;
+// "Deadline", "Round 1 closes", "Results" -> one of DATE_TYPES
+function dateType(text) {
+  const value = (text || "").toLowerCase().trim();
+  if (DATE_TYPES.indexOf(value) !== -1) return value;
+  if (/decision|result|notif|offer|outcome|answer|response/.test(value)) return "decision";
+  if (/\bopen/.test(value)) return "opens";
+  if (/start|begin|commence|orientation|induction|welcome/.test(value)) return "start";
+  if (/deadline|close|closing|round|stage|phase|due|last day|apply by|submit/.test(value)) return "deadline";
+  return "other";
+}
+
+// "June 2027" -> "2027-06". A month without a year gets the next time
+// that month comes round. Returns "" if no month is mentioned.
+function parseMonthOnly(text) {
+  const end = endOfMonthDate(text);
+  return end ? end.slice(0, 7) : "";
+}
+
+// Read one date. Returns { date, approximate } or null.
+function readItemDate(text) {
+  const exact = parseDeadline(text) || parseLooseDate(text);
+  if (exact) return { date: exact, approximate: false };
+  const month = parseMonthOnly(text);
+  return month ? { date: month, approximate: true } : null;
+}
+
+// The last day a date could be: "2027-06" -> "2027-06-30", "2026-11-18" stays.
+// Used to sort dates and to tell whether one has passed.
+function itemEndDate(item) {
+  if (!/^\d{4}-\d{2}$/.test(item.date)) return item.date;
+  const parts = item.date.split("-");
+  return item.date + "-" + String(new Date(Number(parts[0]), Number(parts[1]), 0).getDate()).padStart(2, "0");
+}
+
+// "Paris · Round 1 · 18 Nov 2026" (or "Jun 2027 (approx.)" for a month)
+function itemDateText(item) {
+  if (item.approximate) {
+    const parts = item.date.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
+      .toLocaleDateString(undefined, { month: "short", year: "numeric" }) + " (approx.)";
+  }
+  return formatDate(item.date);
+}
+
+function itemText(item) {
+  return [item.campus, item.label, itemDateText(item)].filter(Boolean).join(" · ");
+}
+
+// Turn one date into a tidy, safe item (also used for dates saved
+// by older versions). Returns null if there's no usable date.
+function cleanDateItem(raw) {
+  if (!raw || typeof raw.date !== "string") return null;
+  const date = String(raw.date || "");
+  const exact = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  if (!exact && !/^\d{4}-\d{2}$/.test(date)) return null;
+  const text = function (value, max) { return typeof value === "string" ? value.trim().slice(0, max) : ""; };
+  return {
+    label: text(raw.label, 60) || "Date",
+    campus: text(raw.campus, 40),
+    date: date,
+    type: dateType(raw.type),
+    sourceUrl: safeUrl(raw.sourceUrl) || "",
+    approximate: !exact,
+  };
+}
+
+// Claude's answer, e.g.
+//   "deadline | Paris | Round 1 | 18 November 2026 | https://...; opens | - | Applications open | September 2026 | https://..."
+// -> a list of date items, in date order. Older free-text answers
+// ("Paris: Round 1 - 18 November 2026") still work.
+function parseApplicationDates(text) {
+  if (typeof text !== "string" || /^\s*(not available|n\/a|none|unknown)\.?\s*$/i.test(text)) return [];
+  const items = [];
+
+  // One date per line, or separated by "; " (a web address can contain ";")
+  text.split(/\n|;\s+|;(?=[a-z]+\s*\|)/i).forEach(function (piece) {
+    const part = piece.trim();
+    if (!part) return;
+    let raw;
+
+    const fields = part.split("|").map(function (field) { return field.trim(); });
+    if (fields.length >= 4) {
+      // type | campus | name | date | URL
+      const found = readItemDate(fields[3]);
+      if (!found) return;
+      const campus = fields[1] === "-" || /^(all|any|none|n\/a)$/i.test(fields[1]) ? "" : fields[1];
+      raw = { type: dateType(fields[0]), campus: campus, label: fields[2], date: found.date, sourceUrl: fields[4] || "" };
+    } else {
+      // Free text: "Paris: Round 1 - 18 November 2026"
+      const found = readItemDate(part);
+      if (!found) return;
+      const split = splitCampus(part);
+      const label = roundLabel(split.rest.replace(/https?:\/\/\S+/g, ""));
+      const url = (part.match(/https?:\/\/\S+/) || [""])[0];
+      raw = { type: dateType(label), campus: split.campus, label: label, date: found.date, sourceUrl: url };
+    }
+
+    const item = cleanDateItem(raw);
+    const duplicate = item && items.some(function (other) {
+      return other.type === item.type && other.date === item.date &&
+        other.label.toLowerCase() === item.label.toLowerCase() && other.campus.toLowerCase() === item.campus.toLowerCase();
     });
-    if (!duplicate) rounds.push({ campus: campus, label: label, date: date });
+    if (item && !duplicate) items.push(item);
   });
-  return rounds.slice(0, 24);
+
+  return sortDateItems(items).slice(0, 40);
+}
+
+// Earliest first
+function sortDateItems(items) {
+  return items.slice().sort(function (a, b) {
+    const x = itemEndDate(a), y = itemEndDate(b);
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
+}
+
+// "yes" -> true. Anything else -> false.
+function parseRolling(text) {
+  return /^\s*yes\b/i.test(text || "") || /^\s*rolling\b/i.test(text || "");
+}
+
+// Universities saved by older versions had admissionsType,
+// admissionsRounds and recommendedWindow. Turn the rounds into
+// application dates, keep "rolling" as a flag, and drop the rest.
+// Returns true if anything changed.
+function migrateUniversity(uni) {
+  const old = "admissionsRounds" in uni || "admissionsType" in uni || "recommendedWindow" in uni;
+  if (!old) return false;
+
+  if (!Array.isArray(uni.applicationDates)) {
+    uni.applicationDates = sortDateItems((uni.admissionsRounds || []).map(function (round) {
+      if (!round) return null;
+      let campus = round.campus || "";
+      let label = round.label || "Round";
+      if (!campus) {             // very old saves had the campus inside the label
+        const split = splitCampus(label);
+        campus = split.campus;
+        label = split.rest || label;
+      }
+      return cleanDateItem({ type: "deadline", campus: campus, label: label, date: round.date });
+    }).filter(Boolean));
+  }
+  if (typeof uni.rolling !== "boolean") uni.rolling = uni.admissionsType === "rolling";
+
+  delete uni.admissionsType;
+  delete uni.admissionsRounds;
+  delete uni.recommendedWindow;
+  return true;
 }
 
 // ----- Your academic profile (set on the Profile tab) -----
@@ -937,23 +1061,21 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
     .filter(function (url, index, list) { return list.indexOf(url) === index; }) // remove repeats
     .slice(0, 3);
 
-  // The deadline: turn the written date into one the date box understands.
-  // If it can't be read, or has passed, keep the wording in the notes instead.
+  // Every application date found (rounds, opening dates, decisions...)
+  const applicationDates = parseApplicationDates(answer.applicationDates);
+
+  // The deadline box needs a full date. If the page only gives a month,
+  // we don't make up a day: the box stays empty and the notes say the month.
   let notes = cleanAnswer(answer.notes);
   const deadlineText = cleanAnswer(answer.deadline);
   let deadline = deadlineText ? parseDeadline(deadlineText) || parseLooseDate(deadlineText) : "";
 
-  // Only a month ("June 2027", "rolling until June")? Use the last day of that month.
-  if (deadlineText && !deadline) {
-    deadline = endOfMonthDate(deadlineText);
-    if (deadline) notes = ("Estimated last day of month (rolling until then): " + formatDate(deadline) + ", from \"" + deadlineText + "\". " + notes).trim();
-  }
-
-  // Still nothing? Use the next round that hasn't passed yet.
-  const rounds = parseRoundsList(answer.admissionsRounds);
+  // No exact deadline? Use the next deadline in the list that has an exact day.
   if (!deadline) {
-    const nextRound = rounds.find(function (round) { return daysUntil(round.date) >= 0; });
-    if (nextRound) deadline = nextRound.date;
+    const next = applicationDates.find(function (item) {
+      return item.type === "deadline" && !item.approximate && daysUntil(item.date) >= 0;
+    });
+    if (next) deadline = next.date;
   }
 
   if (deadline && daysUntil(deadline) < 0) {
@@ -974,10 +1096,8 @@ async function searchOfficialPages(apiKey, uniName, course, found) {
     country: cleanAnswer(answer.country),
     sources: cleanSources,
     domain: domain,
-    // NEW: structured admissions data for the Timeline planner
-    admissionsType: parseAdmissionsType(answer.admissionsType),
-    admissionsRounds: rounds,
-    recommendedWindow: cleanAnswer(answer.recommendedWindow),
+    applicationDates: applicationDates,
+    rolling: parseRolling(answer.rolling),   // just a flag, nothing is worked out from it
     // Verified = we knew the official website, and every page used is on it
     verified: Boolean(domain) && cleanSources.length > 0 && cleanSources.every(function (url) {
       return isOnDomain(url, domain);
@@ -1146,8 +1266,8 @@ function showLookupResult(result, errorText, cachedAt) {
 // then costs nothing. "Search again" always does a fresh search.
 
 // Bumped when the saved search format changes, so older saved searches
-// (without the admissions fields) are searched again once
-const CACHE_VERSION = 3;   // 3: rounds have campuses, searches use your academic profile
+// (in an older format) are searched again once
+const CACHE_VERSION = 4;   // 4: every application date is saved (no recommendations)
 const CACHE_DAYS = 7;
 
 // Your academic profile is part of the key: a search for a different
@@ -1279,9 +1399,8 @@ async function lookUpUniversity(options) {
     verified: Boolean(details && details.verified),
     aiSearched: Boolean(details),
     foundOnWikidata: Boolean(found),
-    admissionsType: details ? details.admissionsType : "",
-    admissionsRounds: details ? details.admissionsRounds : [],
-    recommendedWindow: details ? details.recommendedWindow : "",
+    applicationDates: details ? details.applicationDates || [] : [],
+    rolling: Boolean(details && details.rolling),
     intake: details ? getAcademicProfile().intendedStartDate : "",   // the start date these dates are for
   };
 
@@ -1451,12 +1570,11 @@ form.addEventListener("submit", async function (event) {
     data.verified = lookup.verified;
     data.aiSearched = lookup.aiSearched;
 
-    // Structured admissions data (only from a Claude search, so a search
+    // Application dates (only from a Claude search, so a search
     // without an API key doesn't wipe out what an earlier search found)
     if (lookup.aiSearched) {
-      data.admissionsType = lookup.admissionsType;
-      data.admissionsRounds = lookup.admissionsRounds;
-      data.recommendedWindow = lookup.recommendedWindow;
+      data.applicationDates = lookup.applicationDates;
+      data.rolling = lookup.rolling;
       data.intake = lookup.intake;
     }
   }
@@ -1738,27 +1856,16 @@ function makePanelSection(title, iconName, text, wasSearched) {
   return section;
 }
 
-// NEW: how this university admits students (from auto-fill), e.g.
-// "Rolling admissions · Recommended: apply October-December"
-const ADMISSIONS_TYPE_LABELS = {
-  rolling: "Rolling admissions",
-  rounds: "Several rounds",
-  singleDeadline: "Single deadline",
-  equalConsideration: "Equal consideration (applying early doesn't change your chances)",
-};
-
+// Every application date auto-fill found, one per line, e.g.
+// "Paris · Round 1 · 18 Nov 2026"
 function makeAdmissionsSection(uni) {
-  const parts = [];
-  if (ADMISSIONS_TYPE_LABELS[uni.admissionsType]) parts.push(ADMISSIONS_TYPE_LABELS[uni.admissionsType]);
-  (uni.admissionsRounds || []).forEach(function (round) {
-    parts.push((round.campus ? round.campus + " " : "") + round.label + ": " + formatDate(round.date));
-  });
-  if (uni.recommendedWindow) parts.push("Recommended: " + uni.recommendedWindow);
+  const parts = (uni.applicationDates || []).map(itemText);
+  if (uni.rolling) parts.push("Rolling admissions");
   if (uni.intake) parts.push("For " + intakeLabel(uni.intake) + " entry");
 
   const section = makeElement("div");
   if (parts.length > 0) {
-    section.append(makePanelSection("Admissions", "calendar", parts.join("\n")));
+    section.append(makePanelSection("Application dates", "calendar", parts.join("\n")));
   }
   return section;
 }
@@ -2039,6 +2146,13 @@ document.querySelectorAll(".copy-button").forEach(function (button) {
 // =========================================================
 
 document.getElementById("year").textContent = new Date().getFullYear();
+
+// Update universities saved by older versions to the current format
+// (see migrateUniversity in section 7), and save them once if anything changed
+if (universities.map(migrateUniversity).some(Boolean)) {
+  DataStore.write(STORAGE_KEYS.universities, universities);
+}
+
 updateAiState(); // show whether AI search is on
 showAcademicProfile(); // fill in your academic profile
 redrawEverything();
