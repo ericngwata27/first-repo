@@ -567,8 +567,16 @@ textarea:focus-visible {
 }
 
 .pin-tooltip span {
+  display: block;
   font-size: 0.75rem;
   opacity: 0.75;
+}
+
+/* Your date (from getMyDate) and the official deadline under it */
+.pin-tooltip .pin-tooltip-date {
+  margin-top: 3px;
+  font-weight: 600;
+  opacity: 1;
 }
 
 /* ----- Legend in the bottom-left corner of the map ----- */
@@ -1020,6 +1028,13 @@ textarea {
   gap: 10px;
   margin-top: 4px;
   font-size: 0.82rem;
+  color: var(--ink-3);
+}
+
+/* The official deadline under your date, e.g. "Deadline: Paris · Round 1 · 18 Nov 2026" */
+.uni-deadline-sub {
+  margin-top: 2px;
+  font-size: 0.76rem;
   color: var(--ink-3);
 }
 
