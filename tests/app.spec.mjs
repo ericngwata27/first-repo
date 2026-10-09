@@ -261,3 +261,21 @@ test("export and import move all your data (but never the API key)", async ({ pa
   await expect(page.locator("#stat-total")).toHaveText("1");
   expect(page.errors).toEqual([]);
 });
+
+test("the header says when your changes are saved, or can't be", async ({ page }) => {
+  await openWith(page, {});
+  const status = page.locator("#save-status");
+  await expect(status).toHaveAttribute("data-state", "saved");
+  await expect(status).toHaveText("Saved");
+
+  // Pretend the browser's storage is full
+  await page.evaluate(() => {
+    Storage.prototype.setItem = function () { throw new Error("QuotaExceededError"); };
+  });
+  await openTab(page, "Profile");
+  await page.fill("#profile-personal", "Hello");
+  await expect(status).toHaveAttribute("data-state", "error");
+  await expect(status).toHaveText("Not saved");
+  await expect(page.locator(".toast.is-warning")).toContainText("didn't save that change");
+  expect(page.errors).toEqual([]);
+});

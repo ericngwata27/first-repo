@@ -24,6 +24,7 @@
    20. Background texture, glowing divider and hero band
    21. Collapsible Timeline cards
    22. Your data (export / import)
+   23. Loading, saved and error states
    ========================================================= */
 
 
@@ -2959,4 +2960,89 @@ body::before {
 
 .data-note {
   font-size: 0.85rem;
+}
+
+
+/* =========================================================
+   23. LOADING, SAVED AND ERROR STATES
+   ========================================================= */
+
+/* The status in the header: a colored dot and a word */
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 0 auto;     /* pushed to the right, next to the tabs */
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.save-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.save-status[data-state="loading"] .save-dot {
+  background: var(--ink-3);
+  animation: save-pulse 1s ease-in-out infinite alternate;
+}
+
+.save-status[data-state="error"] {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.save-status[data-state="error"] .save-dot {
+  background: var(--amber);
+}
+
+@keyframes save-pulse {
+  to { opacity: 0.3; }
+}
+
+/* While loading, don't say "No universities yet": we don't know yet */
+.is-loading .empty-state {
+  visibility: hidden;
+}
+
+/* The banner shown if your data couldn't be loaded */
+.load-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--amber);
+  border-radius: 12px;
+  background: var(--amber-soft);
+  color: var(--ink);
+}
+
+.load-error[hidden] {
+  display: none;
+}
+
+.load-error svg {
+  flex: none;
+  color: var(--amber);
+}
+
+.load-error p {
+  flex: 1;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-status[data-state="loading"] .save-dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .load-error {
+    flex-wrap: wrap;
+  }
 }

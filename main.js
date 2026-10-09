@@ -54,12 +54,67 @@ function showEverything() {
   zoomToAllPins();
 }
 
-// Load everything once, update old data, then draw the page.
-async function startApp() {
-  await loadState();
-  upgradeOldData();
-  showEverything();
+// ----- Loading, saved, and "couldn't save" -----
+// The little status in the header. save() (store.js) sends a
+// "data-saved" or "data-save-failed" event after every change.
+
+const saveStatus = document.getElementById("save-status");
+const saveStatusText = document.getElementById("save-status-text");
+const failedParts = new Set();   // parts whose last save didn't work
+let warnedAboutSaving = false;
+
+// kind: "loading", "saved" or "error"
+function setSaveStatus(kind, text) {
+  saveStatus.dataset.state = kind;
+  saveStatusText.textContent = text;
 }
 
-// Other files (timeline.js) wait for this before drawing: appReady.then(...)
+// Caches (remembered searches, your home's map position) don't count:
+// if they aren't saved, nothing of yours is lost
+const CACHE_PARTS = ["searchCache", "homePlace"];
+
+document.addEventListener("data-saved", function (event) {
+  failedParts.delete(event.detail);
+  if (failedParts.size === 0) setSaveStatus("saved", "Saved");
+});
+
+document.addEventListener("data-save-failed", function (event) {
+  if (!dataLoaded || CACHE_PARTS.includes(event.detail)) return;
+  failedParts.add(event.detail);
+  setSaveStatus("error", "Not saved");
+  // Explain once; the header keeps showing "Not saved" until saving works again
+  if (!warnedAboutSaving) {
+    warnedAboutSaving = true;
+    showToast("Your browser didn't save that change (storage is full or blocked). " +
+      "Use Export my data on the Profile tab to keep a copy.", "circle-alert");
+  }
+});
+
+document.getElementById("retry-load").addEventListener("click", function () {
+  location.reload();
+});
+
+
+// ----- Starting -----
+
+// Load everything once, update old data, then draw the page.
+// Returns true if it worked, false if the data couldn't be loaded.
+async function startApp() {
+  try {
+    await loadState();
+  } catch (error) {
+    setSaveStatus("error", "Couldn't load");
+    document.getElementById("load-error").hidden = false;
+    document.body.classList.remove("is-loading");
+    return false;
+  }
+  upgradeOldData();
+  showEverything();
+  setSaveStatus("saved", "Saved");
+  document.body.classList.remove("is-loading");
+  return true;
+}
+
+// Other files (timeline.js) wait for this before drawing:
+// appReady.then(function (loaded) { ... })
 const appReady = startApp();

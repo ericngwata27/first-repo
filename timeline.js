@@ -996,4 +996,6 @@ document.getElementById("export-all-ics").addEventListener("click", function () 
 });
 
 // Draw once the saved data has loaded (see startApp in main.js)
-appReady.then(drawTimeline);
+appReady.then(function (loaded) {
+  if (loaded) drawTimeline();
+});

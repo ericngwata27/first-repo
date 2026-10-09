@@ -103,7 +103,12 @@ const DataStore = {
   },
 };
 
+// False until loadState() has finished. Until then save() refuses to
+// write, so a failed load can never overwrite your real data with nothing.
+let dataLoaded = false;
+
 // Fill `state` from storage. Runs once, when the page opens.
+// (With a backend this can fail; startApp in main.js shows an error then.)
 async function loadState() {
   state.universities = DataStore.read(STORAGE_KEYS.universities, []);
   state.timeline = DataStore.read(STORAGE_KEYS.timeline, {});
@@ -117,6 +122,7 @@ async function loadState() {
   PROFILE_KEYS.forEach(function (key) {
     state.profile[key] = DataStore.readText(STORAGE_KEYS.profilePrefix + key);
   });
+  dataLoaded = true;
 }
 
 // How each part of `state` is written to storage
@@ -140,7 +146,7 @@ const SAVERS = {
 // Returns true if it worked. Either way it tells the page, with a
 // "data-saved" or "data-save-failed" event, so the page can show it.
 function save(part) {
-  const ok = SAVERS[part]();
+  const ok = dataLoaded && SAVERS[part]();
   document.dispatchEvent(new CustomEvent(ok ? "data-saved" : "data-save-failed", { detail: part }));
   return ok;
 }

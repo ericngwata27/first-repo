@@ -25,7 +25,7 @@
   <!-- Our own stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="is-loading">   <!-- main.js removes is-loading once your data is in -->
 
   <!-- =========================================================
        HEADER: logo on the left, tabs on the right.
@@ -40,6 +40,11 @@
           <small>University applications, mapped</small>
         </span>
       </div>
+
+      <!-- Shows whether your data is loading, saved, or couldn't be saved (main.js) -->
+      <p class="save-status" id="save-status" role="status" data-state="loading">
+        <span class="save-dot" aria-hidden="true"></span><span id="save-status-text">Loading…</span>
+      </p>
 
       <!-- The tabs. data-tab says which section each one opens. -->
       <nav class="tabs" aria-label="Sections">
@@ -58,6 +63,13 @@
   </header>
 
   <main class="container">
+
+    <!-- Shown only if your saved data couldn't be loaded (main.js) -->
+    <div class="load-error" id="load-error" role="alert" hidden>
+      <i data-lucide="circle-alert"></i>
+      <p><strong>We couldn't load your saved data.</strong> Nothing has been changed or saved. Try again in a moment.</p>
+      <button class="button button-small" id="retry-load" type="button">Try again</button>
+    </div>
 
     <!-- =========================================================
          TAB 1: UNIVERSITIES
