@@ -132,7 +132,7 @@ The API key and the search cache are never exported.
 
 ## Updating old data (and retiring that code)
 
-Data saved by older versions is updated to the current format once, at startup, by `upgradeOldData()` in `script.js`. Imports run through it too. It covers:
+Data saved by older versions is updated to the current format once, at startup, by `upgradeOldData()` in `main.js`. Imports run through it too. It covers:
 
 - number IDs turned into text
 - `admissionsRounds` / `admissionsType` / `recommendedWindow` turned into `applicationDates` and `rolling` (`migrateUniversity`)

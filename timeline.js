@@ -1,12 +1,12 @@
 // =========================================================
 // MY FUTURE PLANNER - APPLICATION TIMELINE
 //
-// This file builds the Timeline tab. It loads after script.js
+// This file builds the Timeline tab. It loads last, after the other files
 // and reuses things from it: the `universities` list, DataStore,
 // STORAGE_KEYS, parseDate, daysUntil, formatDate, sortByDeadline,
 // makeElement, makeIcon, refreshIcons, showToast, intakeLabel, the
 // application date helpers (itemText, itemEndDate, cleanDateItem,
-// DATE_TYPES) and, from section 3b of script.js, the shared timeline
+// DATE_TYPES) and, from dates.js (section 3b), the shared timeline
 // data: MILESTONES, TimelineStore, cardDates, findTarget, todayText,
 // isDateText and isPastItem.
 //
@@ -52,7 +52,7 @@ const DATE_TYPE_LABELS = {
 
 // =========================================================
 // 2. DATE HELPERS
-// (More are in section 3b of script.js.)
+// (More are in dates.js, section 3b.)
 // =========================================================
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -952,7 +952,7 @@ function exportCalendar(unis, fileName) {
     return;
   }
 
-  downloadFile(buildIcs(events), fileName, "text/calendar;charset=utf-8");   // in script.js, section 14
+  downloadFile(buildIcs(events), fileName, "text/calendar;charset=utf-8");   // in profile.js, section 14
 
   showToast("Saved " + events.length + (events.length === 1 ? " date" : " dates") +
     " to " + fileName + ". Open the file to add them to your calendar.", "calendar-check");
@@ -995,5 +995,5 @@ document.getElementById("export-all-ics").addEventListener("click", function () 
   exportCalendar(state.universities, "university-applications.ics");
 });
 
-// Draw once the saved data has loaded (see startApp in script.js)
+// Draw once the saved data has loaded (see startApp in main.js)
 appReady.then(drawTimeline);

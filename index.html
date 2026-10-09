@@ -108,7 +108,7 @@
           <label><input type="checkbox" data-globe-setting="glow"> Glow</label>
         </div>
 
-        <!-- Details of the selected university. script.js fills in .panel-body -->
+        <!-- Details of the selected university. universities.js fills in .panel-body -->
         <aside id="details-panel" class="details-panel" aria-live="polite">
           <button class="icon-button panel-close" id="close-panel" title="Close" aria-label="Close details">
             <i data-lucide="x"></i>
@@ -189,7 +189,7 @@
               </div>
             </fieldset>
 
-            <!-- Loading animation and result label. script.js fills this in. -->
+            <!-- Loading animation and result label. universities.js fills this in. -->
             <div id="lookup-status" class="lookup-status" hidden></div>
 
             <!-- Step 2: everything below is filled in automatically.
@@ -283,7 +283,7 @@
             </div>
           </div>
 
-          <!-- script.js adds one card per university here -->
+          <!-- universities.js adds one card per university here -->
           <ul id="uni-list" class="uni-list"></ul>
 
           <!-- Shown when there are no universities yet -->
@@ -495,13 +495,19 @@
   <!-- Pop-up messages ("toasts") appear in this corner -->
   <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
-  <!-- Libraries: they must load BEFORE script.js uses them -->
+  <!-- Libraries: they must load BEFORE our code uses them -->
   <script src="https://unpkg.com/globe.gl@2.46.2/dist/globe.gl.min.js"></script>   <!-- the 3D globe -->
   <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script> <!-- the icons -->
 
-  <!-- Our own code -->
-  <script src="script.js"></script>
-  <!-- The Application Timeline page (uses helpers from script.js, so it loads after it) -->
-  <script src="timeline.js"></script>
+  <!-- Our own code, in this order (each file uses the ones above it) -->
+  <script src="store.js"></script>         <!-- your saved data: state, loadState(), save() -->
+  <script src="helpers.js"></script>       <!-- small tools, tabs, toasts -->
+  <script src="dates.js"></script>         <!-- deadlines and "your date" -->
+  <script src="globe.js"></script>         <!-- the 3D globe -->
+  <script src="autofill.js"></script>      <!-- auto-fill: runAutoFill() -->
+  <script src="universities.js"></script>  <!-- the Universities page -->
+  <script src="profile.js"></script>       <!-- the Profile tab, export / import -->
+  <script src="main.js"></script>          <!-- starts the app -->
+  <script src="timeline.js"></script>      <!-- the Timeline page -->
 </body>
 </html>

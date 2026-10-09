@@ -39,7 +39,14 @@ The tests (`tests/app.spec.mjs`) open the site in headless Chrome and check the 
 |---|---|
 | `index.html` | The page: header, the three tabs, the form, the globe container |
 | `style.css` | All the styling (dark theme), in numbered sections |
-| `script.js` | Data, the globe, auto-fill, the Universities page and the Profile |
+| `store.js` | Your saved data: one in-memory `state`, `loadState()` and `save()`. The only file that touches storage |
+| `helpers.js` | Small tools used everywhere: making elements, tabs, pop-up messages |
+| `dates.js` | Deadlines and "your date" (`getMyDate`), and the Timeline's saved data |
+| `globe.js` | The 3D globe and its ⚙️ settings |
+| `autofill.js` | Auto-fill (Wikidata, Wikipedia, Claude). `runAutoFill()` is the one entry point, and the only code that uses the API key |
+| `universities.js` | The Universities page: form, list, details panel, stats |
+| `profile.js` | The Profile tab, plus Export / Import |
+| `main.js` | Starts the app: loads data, updates old data, draws everything |
 | `timeline.js` | The Timeline page (cards, dates, slider, milestones, calendar export) |
 | `textures/` | Optional 8K globe pictures (see its README) |
 | `tests/` | Automated tests and a tiny local web server |
