@@ -3,7 +3,7 @@
 // The website loads its libraries (Globe.gl, three.js, icons) and globe
 // pictures from the internet. Tests serve the same exact versions from
 // node_modules instead, so they're fast and don't depend on the internet.
-// Every other outside request (fonts, Wikidata, map search, Claude) is
+// Every other outside request (fonts, Wikidata, map search, Claude, Supabase) is
 // blocked unless a test answers it itself.
 import { test as base, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -20,6 +20,7 @@ const LOCAL_COPIES = [
   [/unpkg\.com\/three-globe@[^/]+\/example\/img\/(.*)$/, "three-globe/example/img/"],
   [/unpkg\.com\/three@[^/]+\/(.*)$/, "three/"],
   [/unpkg\.com\/lucide@[^/]+\/(.*)$/, "lucide/"],
+  [/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@[^/]+\/(.*)$/, "@supabase/supabase-js/"],
 ];
 
 const TYPES = { js: "text/javascript", json: "application/json", geojson: "application/json",
@@ -92,3 +93,15 @@ export const ESADE = {
   id: 2, name: "Esade", course: "BBA", city: "Barcelona", country: "Spain",
   deadline: "2027-06-30", lat: 41.39, lng: 2.11, rolling: true, applicationDates: [],
 };
+
+// Pretend someone is signed in: save a Supabase session the way the
+// Supabase library does, before the page loads
+export async function signInAs(page, email) {
+  await page.addInitScript((email) => {
+    localStorage.setItem("sb-xhyiyxquqnntvnpnlnhk-auth-token", JSON.stringify({
+      access_token: "test-token", refresh_token: "test-refresh", token_type: "bearer",
+      expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "00000000-0000-4000-8000-000000000001", email, aud: "authenticated", role: "authenticated" },
+    }));
+  }, email);
+}
