@@ -217,13 +217,281 @@ function makeDeadlineChip(dateText) {
   return makeElement("span", "chip level-" + status.level, status.label);
 }
 
-// Soonest deadline first; universities without a date go last
+// Soonest date first (your date, see getMyDate); universities without one go last
 function sortByDeadline(list) {
+  const dates = {};
+  list.forEach(function (uni) { dates[uni.id] = getMyDate(uni).date; });
   return list.slice().sort(function (a, b) {
-    if (!a.deadline) return 1;
-    if (!b.deadline) return -1;
-    return parseDate(a.deadline) - parseDate(b.deadline);
+    if (!dates[a.id]) return dates[b.id] ? 1 : 0;
+    if (!dates[b.id]) return -1;
+    return dates[a.id] < dates[b.id] ? -1 : dates[a.id] > dates[b.id] ? 1 : 0;
   });
+}
+
+
+// =========================================================
+// 3b. YOUR DATES (shared by every page)
+// The Timeline tab saves your planned date, the deadline you chose
+// and dates you added. This section reads them, so the map, the
+// university list and the Timeline all show the same date:
+// getMyDate(uni) is the one place that decides which date that is.
+// =========================================================
+
+// The steps of an application.
+//   daysBefore: ideally done this many days before your planned date
+const MILESTONES = [
+  { key: "testsBooked",         label: "Tests booked",               daysBefore: 56 },
+  { key: "statementDrafted",    label: "Personal statement drafted", daysBefore: 42 },
+  { key: "referencesRequested", label: "References requested",       daysBefore: 42 },
+  { key: "statementFinal",      label: "Personal statement final",   daysBefore: 14 },
+  { key: "referencesReceived",  label: "References received",        daysBefore: 10 },
+  { key: "formFilled",          label: "Online application filled",  daysBefore: 7 },
+  { key: "finalReview",         label: "Final review",               daysBefore: 3 },
+  { key: "submission",          label: "Submission day",             daysBefore: 0 },
+];
+
+// ----- Saving and loading timeline data -----
+// Timeline data is saved separately from the universities, one entry
+// per university (found by the university's id). One entry looks like this:
+// {
+//   plannedDate: "2026-11-10",     your planned submission date, or ""
+//   status: "applying",            one of the STATUSES keys
+//   targetId: "deadline|paris|round 1|2026-11-18",
+//                                  the deadline you chose, or "" for none
+//   manualDates: [                 dates you added yourself
+//     { id: "m1712345678901", label: "Scholarship", campus: "", date: "2027-01-10", type: "deadline" }
+//   ],
+//   removedDates: ["opens||applications open|2026-09-01"],
+//                                  ids of found dates you deleted
+//   milestones: {
+//     statementDrafted: { done: true, date: "2026-10-01", auto: false },
+//     ...one for every milestone. auto = true if the date was counted back
+//     from your planned date, so it moves when you move that date.
+//     Dates you type yourself are never moved.
+//   },
+//   updatedAt: 1791500000000       when it was last changed
+// }
+//
+// BACKEND: this matches an "applications" table with a university_id
+// column (manualDates can be its own "application_dates" table).
+// Replace the insides of TimelineStore with fetch() calls.
+
+const TimelineStore = {
+  readAll: function () {
+    return DataStore.read(STORAGE_KEYS.timeline, {});
+  },
+
+  // Get one university's entry, with every field filled in
+  // (so the rest of the code never has to check for missing parts)
+  get: function (uniId) {
+    const saved = TimelineStore.readAll()[uniId] || {};
+    const savedMilestones = saved.milestones || {};
+
+    const milestones = {};
+    MILESTONES.forEach(function (milestone) {
+      const old = savedMilestones[milestone.key] || {};
+      milestones[milestone.key] = { done: Boolean(old.done), date: isDateText(old.date) ? old.date : "", auto: Boolean(old.auto) };
+    });
+
+    return {
+      plannedDate: isDateText(saved.plannedDate) ? saved.plannedDate : "",
+      status: saved.status || "researching",
+      targetId: typeof saved.targetId === "string" ? saved.targetId : "",
+      manualDates: Array.isArray(saved.manualDates) ? saved.manualDates : [],
+      removedDates: Array.isArray(saved.removedDates) ? saved.removedDates : [],
+      milestones: milestones,
+      updatedAt: saved.updatedAt || null,
+    };
+  },
+
+  save: function (uniId, entry) {
+    const all = TimelineStore.readAll();
+    entry.updatedAt = Date.now();
+    all[uniId] = entry;
+    DataStore.write(STORAGE_KEYS.timeline, all);
+  },
+
+  // Remove entries for universities that have been deleted
+  removeMissing: function (existingIds) {
+    const all = TimelineStore.readAll();
+    let changed = false;
+    Object.keys(all).forEach(function (id) {
+      if (existingIds.indexOf(Number(id)) === -1) {
+        delete all[id];
+        changed = true;
+      }
+    });
+    if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
+  },
+
+  // Entries saved by the old planner had a recommended plan in them.
+  // Keep your status, milestones and any planned date you typed;
+  // drop the planner's own choices (target round, campus, dates it picked).
+  // Rounds you added yourself become dates you added yourself.
+  migrate: function () {
+    const all = TimelineStore.readAll();
+    let changed = false;
+
+    Object.keys(all).forEach(function (id) {
+      const old = all[id] || {};
+      const isOld = ["plannedAuto", "targetRound", "campus", "manualRounds"].some(function (key) { return key in old; });
+      if (!isOld) return;
+
+      const milestones = old.milestones || {};
+      if (old.plannedAuto) {
+        // The planner chose that date, not you: forget it and the
+        // milestone dates it counted back from it
+        Object.keys(milestones).forEach(function (key) {
+          if (milestones[key] && milestones[key].auto) milestones[key].date = "";
+        });
+      }
+
+      all[id] = {
+        plannedDate: old.plannedAuto ? "" : old.plannedDate || "",
+        status: old.status || "researching",
+        targetId: "",
+        manualDates: (Array.isArray(old.manualRounds) ? old.manualRounds : []).map(function (round, index) {
+          const item = cleanDateItem({ label: round.label, date: round.date, type: "deadline" });
+          if (item) item.id = round.key || "m" + index;
+          return item;
+        }).filter(Boolean),
+        removedDates: [],
+        milestones: milestones,
+        updatedAt: old.updatedAt || null,
+      };
+      changed = true;
+    });
+
+    if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
+  },
+};
+
+
+// ----- Date helpers -----
+// Dates are kept as "YYYY-MM-DD" text. Text dates in this format
+// can be compared directly ("2026-11-01" < "2026-12-01").
+
+// A date -> "2026-10-08"
+function toDateText(date) {
+  return date.getFullYear() + "-" +
+    String(date.getMonth() + 1).padStart(2, "0") + "-" +
+    String(date.getDate()).padStart(2, "0");
+}
+
+function todayText() {
+  return toDateText(new Date());
+}
+
+function isDateText(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+}
+
+// A date that has gone completely (a month counts as gone once it's over)
+function isPastItem(item) {
+  return itemEndDate(item) < todayText();
+}
+
+// ----- The dates for one university -----
+// Every date auto-fill found, the deadline from the Universities tab,
+// and the dates you added. Dates you deleted are left out.
+// Each one gets an id so it can be chosen or deleted.
+
+function autoDateId(item) {
+  return [item.type, item.campus, item.label, item.date].join("|").toLowerCase();
+}
+
+function cardDates(uni, entry) {
+  const dates = [];
+
+  (uni.applicationDates || []).forEach(function (raw) {
+    const item = cleanDateItem(raw);
+    if (!item) return;
+    item.id = autoDateId(item);
+    if (!dates.some(function (d) { return d.id === item.id; })) dates.push(item);
+  });
+
+  // The deadline on the Universities tab, if it isn't in the list already
+  if (isDateText(uni.deadline) && !dates.some(function (d) { return d.type === "deadline" && d.date === uni.deadline; })) {
+    dates.push({ id: "official", label: "Application deadline", campus: "", date: uni.deadline,
+      type: "deadline", sourceUrl: (uni.sources && uni.sources[0]) || "", approximate: false });
+  }
+
+  entry.manualDates.forEach(function (raw) {
+    const item = cleanDateItem(raw);
+    if (!item) return;
+    item.id = raw.id;
+    item.manual = true;
+    dates.push(item);
+  });
+
+  return sortDateItems(dates.filter(function (item) {
+    return entry.removedDates.indexOf(item.id) === -1;
+  }));
+}
+
+// The deadline you chose, or null
+function findTarget(dates, entry) {
+  return dates.find(function (item) { return item.id === entry.targetId && item.type === "deadline"; }) || null;
+}
+
+
+// ----- Your date: the one date every page shows -----
+// In this order:
+//   1. your planned submission date (slider or date box)  -> "Planned"
+//   2. the deadline you chose on the Timeline              -> "Deadline"
+//   3. the next upcoming deadline auto-fill found          -> "Next deadline"
+//   4. nothing                                             -> "No date yet"
+// Returns {
+//   kind: "planned" | "deadline" | "next" | "none",
+//   label: "Planned",
+//   date: "2026-11-02"        (for counting days and sorting; "" if none)
+//   dateText: "2 Nov 2026"    (how to show it; months say "approx.")
+//   deadline: the hard limit to show underneath (your chosen deadline,
+//             otherwise the next one), or null
+// }
+function getMyDate(uni) {
+  const entry = TimelineStore.get(uni.id);
+  const dates = cardDates(uni, entry);
+  const target = findTarget(dates, entry);
+  const next = dates.find(function (item) { return item.type === "deadline" && !isPastItem(item); }) || null;
+  const deadline = target || next;
+
+  if (entry.plannedDate) {
+    return { kind: "planned", label: "Planned", date: entry.plannedDate, dateText: formatDate(entry.plannedDate), deadline: deadline };
+  }
+  if (deadline) {
+    return { kind: target ? "deadline" : "next", label: target ? "Deadline" : "Next deadline",
+      date: itemEndDate(deadline), dateText: itemDateText(deadline), deadline: deadline };
+  }
+  return { kind: "none", label: "No date yet", date: "", dateText: "", deadline: null };
+}
+
+// Days left and a color level for your date (like getDeadlineStatus).
+// A planned date that has passed is "Overdue"; a deadline that has passed is "Closed".
+function getMyDateStatus(myDate) {
+  if (!myDate.date) return { level: "none", label: "No date yet" };
+  const status = getDeadlineStatus(myDate.date);
+  if (status.days < 0 && myDate.kind === "planned") return { level: "urgent", label: "Overdue", days: status.days };
+  return status;
+}
+
+function makeMyDateChip(myDate) {
+  const status = getMyDateStatus(myDate);
+  return makeElement("span", "chip level-" + status.level, status.label);
+}
+
+// The two lines of text for your date, e.g.
+//   main: "Planned · 2 Nov 2026"
+//   sub:  "Deadline: Paris · Round 1 · 18 Nov 2026"
+// For a deadline, sub says which one it is ("Paris · Round 1").
+function describeMyDate(myDate) {
+  if (myDate.kind === "none") return { main: "", sub: "" };   // the chip already says "No date yet"
+  const main = myDate.label + " · " + myDate.dateText;
+  if (myDate.kind === "planned") {
+    return { main: main, sub: myDate.deadline ? "Deadline: " + itemText(myDate.deadline) : "" };
+  }
+  const item = myDate.deadline;
+  return { main: main, sub: [item.campus, item.label].filter(Boolean).join(" · ") };
 }
 
 
@@ -254,6 +522,10 @@ tabButtons.forEach(function (button) {
 
     // Let other pages know which tab opened (the Timeline refreshes itself)
     document.dispatchEvent(new CustomEvent("tab-opened", { detail: button.dataset.tab }));
+
+    // Coming back to the Universities tab: redraw the list and pins, so they
+    // show any date you changed on the Timeline (see getMyDate)
+    if (button.dataset.tab === "universities-tab") redrawEverything();
   });
 });
 
@@ -316,9 +588,9 @@ if (typeof L === "undefined") {
   ).addTo(map);
 }
 
-// Build a pin. Its color comes from the deadline.
+// Build a pin. Its color comes from your date (see getMyDate).
 function makePinIcon(uni, isSelected) {
-  const level = getDeadlineStatus(uni.deadline).level;
+  const level = getMyDateStatus(getMyDate(uni)).level;
   return L.divIcon({
     className: "", // stops Leaflet adding its default white square
     html: '<div class="pin level-' + level +
@@ -345,9 +617,12 @@ function drawPins() {
       zIndexOffset: uni.id === selectedId ? 1000 : 0,
     }).addTo(map);
 
-    // Tooltip shown on hover: name, plus city underneath
+    // Tooltip shown on hover: name, city, your date and the official deadline
+    const myDate = describeMyDate(getMyDate(uni));
     const tooltip = document.createElement("div");
-    tooltip.append(makeElement("strong", "", uni.name), makeElement("span", "", uni.city + ", " + uni.country));
+    tooltip.append(makeElement("strong", "", uni.name), makeElement("span", "", uni.city + ", " + uni.country),
+      makeElement("span", "pin-tooltip-date", myDate.main || "No date yet"));
+    if (myDate.sub) tooltip.append(makeElement("span", "pin-tooltip-sub", myDate.sub));
     marker.bindTooltip(tooltip, { direction: "top", offset: [0, -42], className: "pin-tooltip" });
 
     marker.on("click", function () {
@@ -1721,7 +1996,8 @@ function drawList() {
   emptyList.hidden = universities.length > 0;
 
   sortByDeadline(universities).forEach(function (uni) {
-    const status = getDeadlineStatus(uni.deadline);
+    const myDate = getMyDate(uni);           // your planned date, chosen deadline or next deadline
+    const status = getMyDateStatus(myDate);
 
     // The card. Its class sets the colored strip on the left.
     const card = makeElement("li", "uni-card level-" + status.level);
@@ -1740,9 +2016,13 @@ function drawList() {
     place.append(makeIcon("map-pin"), uni.city + ", " + uni.country);
     meta.append(course, place);
 
+    // e.g. [24 days left] Planned · 2 Nov 2026
+    //      Deadline: Paris · Round 1 · 18 Nov 2026
+    const text = describeMyDate(myDate);
     const deadline = makeElement("div", "uni-deadline");
-    deadline.append(makeDeadlineChip(uni.deadline));
-    if (uni.deadline) deadline.append(formatDate(uni.deadline));
+    deadline.append(makeMyDateChip(myDate), makeElement("span", "", text.main));
+    const deadlineSub = makeElement("div", "uni-deadline-sub", text.sub);
+    deadlineSub.hidden = !text.sub;
 
     const nameRow = makeElement("span", "uni-name", uni.name);
     // NEW: a small green shield if the details came from the official website
@@ -1753,7 +2033,7 @@ function drawList() {
       nameRow.append(mark);
     }
 
-    main.append(nameRow, meta, deadline);
+    main.append(nameRow, meta, deadline, deadlineSub);
     main.addEventListener("click", function () {
       selectUniversity(uni.id, true);
     });
@@ -1911,8 +2191,10 @@ function drawDetails() {
   panelBody.innerHTML = "";
 
   // Deadline chip and (NEW) where the details came from
+  const myDate = getMyDate(uni);
+  const myDateText = describeMyDate(myDate);
   const statusRow = makeElement("div", "panel-badges");
-  statusRow.append(makeDeadlineChip(uni.deadline));
+  statusRow.append(makeMyDateChip(myDate));
   if (uni.verified) {
     const badge = makeElement("span", "source-badge is-verified");
     badge.append(makeIcon("shield-check"), "Verified from official sources");
@@ -1927,8 +2209,9 @@ function drawDetails() {
   const facts = makeElement("div", "panel-facts");
   facts.append(
     makeFact("map-pin", uni.city + ", " + uni.country),
-    makeFact("calendar", uni.deadline ? "Deadline " + formatDate(uni.deadline) : "No deadline set")
+    makeFact("calendar", myDateText.main || "No date yet")
   );
+  if (myDateText.sub) facts.append(makeFact("flag", myDateText.sub));
 
   // NEW: link to the official website
   const website = safeUrl(uni.website);
@@ -2033,12 +2316,14 @@ function drawStats() {
   }));
   document.getElementById("stat-countries").textContent = countries.size;
 
-  // The soonest deadline that hasn't passed yet
-  const upcoming = sortByDeadline(universities).find(function (uni) {
-    return uni.deadline && daysUntil(uni.deadline) >= 0;
+  // The soonest of your dates that hasn't passed yet
+  const upcoming = sortByDeadline(universities).map(function (uni) {
+    return { uni: uni, myDate: getMyDate(uni) };
+  }).find(function (item) {
+    return item.myDate.date && daysUntil(item.myDate.date) >= 0;
   });
   document.getElementById("stat-next").textContent = upcoming
-    ? upcoming.name + " · " + getDeadlineStatus(upcoming.deadline).label
+    ? upcoming.uni.name + " · " + upcoming.myDate.label + " · " + getMyDateStatus(upcoming.myDate).label
     : "None yet";
 }
 
@@ -2152,6 +2437,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
 if (universities.map(migrateUniversity).some(Boolean)) {
   DataStore.write(STORAGE_KEYS.universities, universities);
 }
+TimelineStore.migrate();   // the same for timeline entries saved by the old planner
 
 updateAiState(); // show whether AI search is on
 showAcademicProfile(); // fill in your academic profile

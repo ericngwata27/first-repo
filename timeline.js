@@ -4,43 +4,30 @@
 // This file builds the Timeline tab. It loads after script.js
 // and reuses things from it: the `universities` list, DataStore,
 // STORAGE_KEYS, parseDate, daysUntil, formatDate, sortByDeadline,
-// makeElement, makeIcon, refreshIcons, showToast, intakeLabel and
-// the application date helpers (itemText, itemEndDate, sortDateItems,
-// cleanDateItem, DATE_TYPES).
+// makeElement, makeIcon, refreshIcons, showToast, intakeLabel, the
+// application date helpers (itemText, itemEndDate, cleanDateItem,
+// DATE_TYPES) and, from section 3b of script.js, the shared timeline
+// data: MILESTONES, TimelineStore, cardDates, findTarget, todayText,
+// isDateText and isPastItem.
 //
 // The Timeline SHOWS you information. It doesn't choose for you:
 // every date auto-fill found is listed, you pick a target deadline
 // (if you want one) and drag the slider to your planned date.
 //
 // Sections in this file:
-//   1. Settings (milestones and statuses)
-//   2. Saving and loading timeline data
-//   3. Date helpers
-//   4. The dates shown on a card
-//   5. Timeline cards
-//   6. The timeline bar with a slider
-//   7. The summary at the top
-//   8. Calendar export (.ics files)
-//   9. Drawing the page
+//   1. Settings (statuses)
+//   2. Date helpers
+//   3. Timeline cards
+//   4. The timeline bar with a slider
+//   5. The summary at the top
+//   6. Calendar export (.ics files)
+//   7. Drawing the page
 // =========================================================
 
 
 // =========================================================
 // 1. SETTINGS
 // =========================================================
-
-// The steps of an application.
-//   daysBefore: ideally done this many days before your planned date
-const MILESTONES = [
-  { key: "testsBooked",         label: "Tests booked",               daysBefore: 56 },
-  { key: "statementDrafted",    label: "Personal statement drafted", daysBefore: 42 },
-  { key: "referencesRequested", label: "References requested",       daysBefore: 42 },
-  { key: "statementFinal",      label: "Personal statement final",   daysBefore: 14 },
-  { key: "referencesReceived",  label: "References received",        daysBefore: 10 },
-  { key: "formFilled",          label: "Online application filled",  daysBefore: 7 },
-  { key: "finalReview",         label: "Final review",               daysBefore: 3 },
-  { key: "submission",          label: "Submission day",             daysBefore: 0 },
-];
 
 const STATUSES = [
   { key: "researching", label: "Researching" },
@@ -64,143 +51,11 @@ const DATE_TYPE_LABELS = {
 
 
 // =========================================================
-// 2. SAVING AND LOADING TIMELINE DATA
-//
-// Timeline data is saved separately from the universities, one entry
-// per university (found by the university's id). One entry looks like this:
-// {
-//   plannedDate: "2026-11-10",     your planned submission date, or ""
-//   status: "applying",            one of the STATUSES keys
-//   targetId: "deadline|paris|round 1|2026-11-18",
-//                                  the deadline you chose, or "" for none
-//   manualDates: [                 dates you added yourself
-//     { id: "m1712345678901", label: "Scholarship", campus: "", date: "2027-01-10", type: "deadline" }
-//   ],
-//   removedDates: ["opens||applications open|2026-09-01"],
-//                                  ids of found dates you deleted
-//   milestones: {
-//     statementDrafted: { done: true, date: "2026-10-01", auto: false },
-//     ...one for every milestone. auto = true if the date was counted back
-//     from your planned date, so it moves when you move that date.
-//     Dates you type yourself are never moved.
-//   },
-//   updatedAt: 1791500000000       when it was last changed
-// }
-//
-// BACKEND: this matches an "applications" table with a university_id
-// column (manualDates can be its own "application_dates" table).
-// Replace the insides of TimelineStore with fetch() calls.
-// =========================================================
-
-const TimelineStore = {
-  readAll: function () {
-    return DataStore.read(STORAGE_KEYS.timeline, {});
-  },
-
-  // Get one university's entry, with every field filled in
-  // (so the rest of the code never has to check for missing parts)
-  get: function (uniId) {
-    const saved = TimelineStore.readAll()[uniId] || {};
-    const savedMilestones = saved.milestones || {};
-
-    const milestones = {};
-    MILESTONES.forEach(function (milestone) {
-      const old = savedMilestones[milestone.key] || {};
-      milestones[milestone.key] = { done: Boolean(old.done), date: isDateText(old.date) ? old.date : "", auto: Boolean(old.auto) };
-    });
-
-    return {
-      plannedDate: isDateText(saved.plannedDate) ? saved.plannedDate : "",
-      status: saved.status || "researching",
-      targetId: typeof saved.targetId === "string" ? saved.targetId : "",
-      manualDates: Array.isArray(saved.manualDates) ? saved.manualDates : [],
-      removedDates: Array.isArray(saved.removedDates) ? saved.removedDates : [],
-      milestones: milestones,
-      updatedAt: saved.updatedAt || null,
-    };
-  },
-
-  save: function (uniId, entry) {
-    const all = TimelineStore.readAll();
-    entry.updatedAt = Date.now();
-    all[uniId] = entry;
-    DataStore.write(STORAGE_KEYS.timeline, all);
-  },
-
-  // Remove entries for universities that have been deleted
-  removeMissing: function (existingIds) {
-    const all = TimelineStore.readAll();
-    let changed = false;
-    Object.keys(all).forEach(function (id) {
-      if (existingIds.indexOf(Number(id)) === -1) {
-        delete all[id];
-        changed = true;
-      }
-    });
-    if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
-  },
-
-  // Entries saved by the old planner had a recommended plan in them.
-  // Keep your status, milestones and any planned date you typed;
-  // drop the planner's own choices (target round, campus, dates it picked).
-  // Rounds you added yourself become dates you added yourself.
-  migrate: function () {
-    const all = TimelineStore.readAll();
-    let changed = false;
-
-    Object.keys(all).forEach(function (id) {
-      const old = all[id] || {};
-      const isOld = ["plannedAuto", "targetRound", "campus", "manualRounds"].some(function (key) { return key in old; });
-      if (!isOld) return;
-
-      const milestones = old.milestones || {};
-      if (old.plannedAuto) {
-        // The planner chose that date, not you: forget it and the
-        // milestone dates it counted back from it
-        Object.keys(milestones).forEach(function (key) {
-          if (milestones[key] && milestones[key].auto) milestones[key].date = "";
-        });
-      }
-
-      all[id] = {
-        plannedDate: old.plannedAuto ? "" : old.plannedDate || "",
-        status: old.status || "researching",
-        targetId: "",
-        manualDates: (Array.isArray(old.manualRounds) ? old.manualRounds : []).map(function (round, index) {
-          const item = cleanDateItem({ label: round.label, date: round.date, type: "deadline" });
-          if (item) item.id = round.key || "m" + index;
-          return item;
-        }).filter(Boolean),
-        removedDates: [],
-        milestones: milestones,
-        updatedAt: old.updatedAt || null,
-      };
-      changed = true;
-    });
-
-    if (changed) DataStore.write(STORAGE_KEYS.timeline, all);
-  },
-};
-
-
-// =========================================================
-// 3. DATE HELPERS
-// Dates are kept as "YYYY-MM-DD" text, like the rest of the site.
-// Text dates in this format can be compared directly ("2026-11-01" < "2026-12-01").
+// 2. DATE HELPERS
+// (More are in section 3b of script.js.)
 // =========================================================
 
 const DAY = 24 * 60 * 60 * 1000;
-
-// A date -> "2026-10-08"
-function toDateText(date) {
-  return date.getFullYear() + "-" +
-    String(date.getMonth() + 1).padStart(2, "0") + "-" +
-    String(date.getDate()).padStart(2, "0");
-}
-
-function todayText() {
-  return toDateText(new Date());
-}
 
 // "2026-10-08" plus 3 days -> "2026-10-11" (use a negative number to go back)
 function addDays(dateText, days) {
@@ -230,15 +85,6 @@ function relativeDays(dateText) {
   return Math.abs(days) + (days === -1 ? " day ago" : " days ago");
 }
 
-function isDateText(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value || "");
-}
-
-// A date that has gone completely (a month counts as gone once it's over)
-function isPastItem(item) {
-  return itemEndDate(item) < todayText();
-}
-
 // Where a date sits on the timeline bar. A month on its own goes in the middle.
 function itemBarDate(item) {
   return item.approximate ? item.date + "-15" : item.date;
@@ -246,53 +92,7 @@ function itemBarDate(item) {
 
 
 // =========================================================
-// 4. THE DATES SHOWN ON A CARD
-// Every date auto-fill found, the deadline from the Universities tab,
-// and the dates you added. Dates you deleted are left out.
-// Each one gets an id so it can be chosen or deleted.
-// =========================================================
-
-function autoDateId(item) {
-  return [item.type, item.campus, item.label, item.date].join("|").toLowerCase();
-}
-
-function cardDates(uni, entry) {
-  const dates = [];
-
-  (uni.applicationDates || []).forEach(function (raw) {
-    const item = cleanDateItem(raw);
-    if (!item) return;
-    item.id = autoDateId(item);
-    if (!dates.some(function (d) { return d.id === item.id; })) dates.push(item);
-  });
-
-  // The deadline on the Universities tab, if it isn't in the list already
-  if (isDateText(uni.deadline) && !dates.some(function (d) { return d.type === "deadline" && d.date === uni.deadline; })) {
-    dates.push({ id: "official", label: "Application deadline", campus: "", date: uni.deadline,
-      type: "deadline", sourceUrl: (uni.sources && uni.sources[0]) || "", approximate: false });
-  }
-
-  entry.manualDates.forEach(function (raw) {
-    const item = cleanDateItem(raw);
-    if (!item) return;
-    item.id = raw.id;
-    item.manual = true;
-    dates.push(item);
-  });
-
-  return sortDateItems(dates.filter(function (item) {
-    return entry.removedDates.indexOf(item.id) === -1;
-  }));
-}
-
-// The deadline you chose, or null
-function findTarget(dates, entry) {
-  return dates.find(function (item) { return item.id === entry.targetId && item.type === "deadline"; }) || null;
-}
-
-
-// =========================================================
-// 5. TIMELINE CARDS
+// 3. TIMELINE CARDS
 // One card per university. When something changes, only the
 // parts that depend on it are redrawn (so the box you're typing
 // in keeps its place).
@@ -675,7 +475,7 @@ function buildCard(uni) {
 
 
 // =========================================================
-// 6. THE TIMELINE BAR WITH A SLIDER
+// 4. THE TIMELINE BAR WITH A SLIDER
 // A bar from today to the latest date found. Every date is a dot
 // (deadlines are red diamonds). Hover or tap a dot to see what it is.
 // Drag the handle to set your planned submission date: it snaps to
@@ -846,7 +646,7 @@ function buildTimelineBar(uni, dates, target, entry, actions) {
 
 
 // =========================================================
-// 7. THE SUMMARY AT THE TOP
+// 5. THE SUMMARY AT THE TOP
 // How many applications are at each status, and what's next.
 // =========================================================
 
@@ -910,7 +710,7 @@ function drawSummary() {
 
 
 // =========================================================
-// 8. CALENDAR EXPORT (.ics FILES)
+// 6. CALENDAR EXPORT (.ics FILES)
 // An .ics file is a standard calendar file. Opening it adds the
 // events to Apple Calendar, Google Calendar or Outlook.
 // Each event is all-day, with a reminder at 9am the day before.
@@ -1046,7 +846,7 @@ function exportCalendar(unis, fileName) {
 
 
 // =========================================================
-// 9. DRAWING THE PAGE
+// 7. DRAWING THE PAGE
 // =========================================================
 
 const timelineList = document.getElementById("timeline-list");
@@ -1059,7 +859,8 @@ function drawTimeline() {
   timelineList.innerHTML = "";
   timelineEmpty.hidden = universities.length > 0;
 
-  // Soonest deadline first, like the university list
+  // Soonest date first (your planned date, chosen deadline or next deadline),
+  // like the university list
   sortByDeadline(universities).forEach(function (uni) {
     timelineList.append(buildCard(uni));
   });
@@ -1080,5 +881,4 @@ document.getElementById("export-all-ics").addEventListener("click", function () 
   exportCalendar(universities, "university-applications.ics");
 });
 
-TimelineStore.migrate();   // update entries saved by the old planner (only changes anything once)
 drawTimeline();
