@@ -16,6 +16,10 @@
    12. Footer
    13. Animations
    14. Responsive (tablets and phones)
+   15. Auto-fill
+   16. Application timeline
+   17. Academic profile
+   18. Application dates and the timeline slider
    ========================================================= */
 
 
@@ -1826,24 +1830,6 @@ textarea {
   gap: 16px;
 }
 
-/* ----- The two date boxes ----- */
-.tl-dates {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.tl-date-box {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  min-width: 0;
-}
-
 .tl-date-label {
   font-size: 0.72rem;
   font-weight: 600;
@@ -1852,130 +1838,6 @@ textarea {
   color: var(--ink-3);
   margin: 0;
 }
-
-.tl-date-value {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-}
-
-.tl-date-value.is-empty {
-  color: var(--amber);
-  font-style: italic;
-  font-family: var(--font-body);
-  font-weight: 600;
-}
-
-.tl-date-note {
-  font-size: 0.78rem;
-  color: var(--ink-3);
-}
-
-.tl-date-box input[type="date"] {
-  padding: 6px 10px;
-  background: var(--surface);
-}
-
-/* ----- The mini timeline bar ----- */
-.tl-visual {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.tl-track {
-  position: relative;
-  height: 8px;
-  margin: 8px 7px 0;  /* room for the dots at the very ends */
-  border-radius: 999px;
-  background: var(--line);
-}
-
-/* Time that has already passed */
-.tl-elapsed {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  border-radius: 999px;
-  background: var(--line-strong);
-}
-
-/* Buffer between planned date and deadline */
-.tl-segment {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 999px;
-  background: var(--green);
-  opacity: 0.6;
-}
-
-.tl-segment.is-late {
-  background: var(--red);
-}
-
-/* Dots on the line */
-.tl-marker {
-  position: absolute;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--surface);
-  transform: translate(-50%, -50%);
-  background: var(--marker-color);
-}
-
-.tl-marker-today    { --marker-color: var(--ink); }
-.tl-marker-planned  { --marker-color: var(--amber); }        /* your plan */
-.tl-marker-round    { --marker-color: var(--line-strong); }  /* other rounds */
-.tl-marker-final    { --marker-color: var(--red); }          /* final deadline */
-.tl-marker-target   { --marker-color: var(--accent); }       /* the round you're aiming for */
-
-/* The round you're aiming for is a little bigger, with a blue glow */
-.tl-marker.tl-marker-target {
-  width: 16px;
-  height: 16px;
-  box-shadow: 0 0 0 4px var(--accent-soft);
-  z-index: 1;
-}
-
-.tl-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  font-size: 0.82rem;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.tl-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tl-legend-item strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.tl-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--marker-color);
-  display: inline-block;
-}
-
-.tl-message {
-  font-size: 0.86rem;
-  color: var(--ink-2);
-}
-
-.tl-message.is-good  { color: var(--green); }
-.tl-message.is-tight { color: var(--amber); }
-.tl-message.is-late  { color: var(--red); }
 
 /* ----- Milestone checklist ----- */
 .tl-milestone-header {
@@ -2095,10 +1957,6 @@ textarea {
     gap: 10px;
   }
 
-  .tl-dates {
-    grid-template-columns: 1fr;
-  }
-
   .tl-footer {
     justify-content: stretch;
   }
@@ -2120,242 +1978,7 @@ textarea {
 
 
 /* =========================================================
-   17. APPLICATION STRATEGY (new)
-   Round labels on the timeline bar, the target round dropdown,
-   the list of rounds and the strategy notes.
-   ========================================================= */
-
-/* Room above the bar for round labels (R1, R2, ED...) */
-.tl-track.has-labels {
-  margin-top: 26px;
-}
-
-.tl-marker-label {
-  position: absolute;
-  bottom: calc(100% + 5px);
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  color: var(--ink-3);
-}
-
-.tl-marker-target .tl-marker-label {
-  color: var(--accent-text);
-}
-
-.tl-marker-final .tl-marker-label {
-  color: var(--red);
-}
-
-.tl-legend-item.is-target strong {
-  color: var(--accent-text);
-}
-
-/* ----- Target round dropdown ----- */
-.tl-target-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.tl-target-select,
-.tl-campus-select {
-  flex: 1;
-  min-width: 0;
-  font: 500 0.9rem var(--font-body);
-  color: var(--ink);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: border-color var(--fast);
-}
-
-.tl-target-select:hover,
-.tl-campus-select:hover {
-  border-color: var(--line-strong);
-}
-
-.tl-target-select:focus,
-.tl-campus-select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-
-/* ----- The list of rounds ----- */
-.tl-rounds {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tl-round-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.tl-round-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.8rem;
-  color: var(--ink-2);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
-
-.tl-round-chip strong {
-  color: var(--ink);
-}
-
-.tl-round-chip.is-past {
-  opacity: 0.5;
-  text-decoration: line-through;
-}
-
-.tl-chip-remove {
-  border: none;
-  background: none;
-  color: var(--ink-3);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0 0 0 2px;
-}
-
-.tl-chip-remove:hover {
-  color: var(--red);
-}
-
-.tl-add-round {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: 600 0.8rem var(--font-body);
-  color: var(--accent-text);
-  background: none;
-  border: 1px dashed var(--line-strong);
-  border-radius: 999px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-
-.tl-add-round:hover {
-  border-color: var(--accent-text);
-}
-
-.tl-add-round .lucide {
-  width: 13px;
-  height: 13px;
-}
-
-.tl-add-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tl-add-form input {
-  flex: 1 1 130px;
-  width: auto;
-  padding: 6px 10px;
-  font-size: 0.85rem;
-}
-
-/* ----- Strategy notes ----- */
-.tl-strategy {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tl-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 0.86rem;
-  line-height: 1.45;
-  color: var(--ink-2);
-}
-
-.tl-note .lucide {
-  margin-top: 2px;
-  color: var(--ink-3);
-}
-
-.tl-note.is-good .lucide  { color: var(--green); }
-.tl-note.is-tight .lucide { color: var(--amber); }
-.tl-note.is-late          { color: var(--red); }
-.tl-note.is-late .lucide  { color: var(--red); }
-
-/* The recommendation itself stands out in blue */
-.tl-note.is-plan {
-  color: var(--ink);
-  font-weight: 600;
-  background: var(--accent-soft);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-.tl-note.is-plan .lucide {
-  color: var(--accent-text);
-}
-
-
-/* =========================================================
-   18. RECOMMENDED WINDOW AND SOURCES (new)
-   ========================================================= */
-
-/* The university's recommended window: a light blue band on the bar */
-.tl-window {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  border: 1px solid rgba(147, 166, 255, 0.45);
-}
-
-.tl-window-dot {
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-text);
-}
-
-/* "Based on ..." under the recommendation */
-.tl-note-source {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.76rem;
-  font-weight: 500;
-  color: var(--ink-3);
-}
-
-/* Round labels that would overlap the one before move below the line */
-.tl-marker-label.is-below {
-  bottom: auto;
-  top: calc(100% + 5px);
-}
-
-.tl-track.has-labels-below {
-  margin-bottom: 22px;
-}
-
-
-/* =========================================================
-   19. ACADEMIC PROFILE AND CAMPUSES (new)
+   17. ACADEMIC PROFILE (new)
    ========================================================= */
 
 /* The four academic profile boxes on the Profile tab */
@@ -2379,16 +2002,514 @@ textarea {
   color: var(--amber);
 }
 
-/* Campus dropdown on Timeline cards */
-.tl-campus-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 @media (max-width: 600px) {
   .academic-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* =========================================================
+   18. APPLICATION DATES AND THE TIMELINE SLIDER (new)
+   The list of dates on each Timeline card, and the bar you
+   drag to set your planned submission date.
+   ========================================================= */
+
+.tl-left .eyebrow {
+  margin: 0;
+}
+
+/* ----- The list of dates ----- */
+.tl-date-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tl-date-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+  transition: background var(--fast);
+}
+
+.tl-date-item:hover {
+  background: var(--surface-2);
+}
+
+/* The date itself (a button for deadlines, so you can choose one) */
+.tl-date-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+button.tl-date-main {
+  cursor: pointer;
+}
+
+button.tl-date-main:focus-visible {
+  outline: 3px solid rgba(147, 166, 255, 0.45);
+  outline-offset: 1px;
+}
+
+.tl-date-text {
+  min-width: 0;
+}
+
+/* Deadlines are red and bold */
+.tl-type-deadline .tl-date-main {
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* The deadline you chose */
+.tl-date-item.is-target .tl-date-main {
+  background: var(--red-soft);
+  border-color: var(--red);
+}
+
+.tl-target-badge,
+.tl-type-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.tl-target-badge {
+  color: var(--bg);
+  background: var(--red);
+}
+
+.tl-type-tag {
+  color: var(--ink-3);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+/* Dates that have passed are greyed out */
+.tl-date-item.is-past .tl-date-main {
+  color: var(--ink-3);
+  font-weight: 400;
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}
+
+/* Small dot in front of each date (same colors as on the bar) */
+.tl-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-text);
+}
+
+.tl-type-deadline .tl-dot {
+  background: var(--red);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.tl-date-item.is-past .tl-dot {
+  background: var(--line-strong);
+}
+
+/* Source link and delete button */
+.tl-date-source,
+.tl-date-remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--fast), background var(--fast);
+}
+
+.tl-date-source .lucide,
+.tl-date-remove .lucide {
+  width: 15px;
+  height: 15px;
+}
+
+.tl-date-source:hover {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.tl-date-remove:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.tl-date-empty,
+.tl-date-hint {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+}
+
+.tl-date-hint {
+  color: var(--ink-3);
+}
+
+/* ----- Add date / restore ----- */
+.tl-date-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tl-add-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font: 600 0.82rem var(--font-body);
+  color: var(--accent-text);
+  background: none;
+  border: 1px dashed var(--line-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast);
+}
+
+.tl-add-date:hover {
+  border-color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.tl-add-date .lucide {
+  width: 14px;
+  height: 14px;
+}
+
+.tl-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.tl-add-form input,
+.tl-add-form select {
+  flex: 1 1 130px;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+/* ----- The one short line for rolling admissions ----- */
+.tl-rolling {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--amber);
+}
+
+.tl-rolling .lucide {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ----- Planned date and the slider ----- */
+.tl-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px 12px;
+}
+
+.tl-planned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.tl-planned-row input[type="date"] {
+  width: auto;
+  padding: 6px 10px;
+  background: var(--surface);
+}
+
+/* The bar. Tall enough to grab with a finger. Vertical swipes still
+   scroll the page (pan-y); sideways drags move the handle. */
+.tl-bar {
+  position: relative;
+  height: 64px;
+  margin-top: 28px;          /* room for the date bubble above the handle */
+  padding: 0 14px;
+  touch-action: pan-y;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tl-bar-inner {
+  position: relative;
+  height: 100%;
+}
+
+.tl-bar-line,
+.tl-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 999px;
+}
+
+.tl-bar-line {
+  right: 0;
+  background: var(--line-strong);
+}
+
+.tl-bar-fill {
+  width: 0;
+  background: var(--amber);
+  opacity: 0.6;
+}
+
+/* "Today" at the start of the bar */
+.tl-bar-today {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 26px;
+  margin: -13px 0 0 -1px;
+  background: var(--ink);
+}
+
+.tl-bar-today-label {
+  position: absolute;
+  top: 28px;
+  left: -4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* A dot for each date. Deadlines are red diamonds. */
+.tl-bar-marker {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: help;
+  z-index: 1;
+}
+
+.tl-bar-marker::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--accent-text);
+  border: 2px solid var(--surface-2);
+}
+
+.tl-bar-marker.is-deadline::before {
+  inset: 5px;
+  border-radius: 2px;
+  background: var(--red);
+  transform: rotate(45deg);
+}
+
+/* The deadline you chose gets a ring */
+.tl-bar-marker.is-target::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 2px solid var(--red);
+  border-radius: 50%;
+}
+
+/* The label that appears when you hover or tap a dot */
+.tl-bar-marker:hover,
+.tl-bar-marker:focus {
+  z-index: 4;
+  outline: none;
+}
+
+.tl-bar-tip {
+  display: none;
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 10px;
+  font: 600 0.78rem/1.4 var(--font-body);
+  color: var(--ink);
+  text-align: left;
+  white-space: pre-line;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.tl-bar-marker:hover .tl-bar-tip,
+.tl-bar-marker:focus .tl-bar-tip {
+  display: block;
+}
+
+/* Near the ends, the label opens towards the middle so it stays inside the card */
+.tl-bar-marker.tip-right .tl-bar-tip { transform: translateX(-12px); }
+.tl-bar-marker.tip-left .tl-bar-tip  { transform: translateX(calc(-100% + 12px)); }
+
+/* The handle you drag */
+.tl-bar-handle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  background: var(--amber);
+  border: 3px solid var(--surface);
+  box-shadow: 0 0 0 2px var(--amber), var(--shadow);
+  cursor: grab;
+  touch-action: none;        /* dragging the handle never scrolls the page */
+  z-index: 3;
+  transition: transform var(--fast);
+}
+
+.tl-bar-handle:focus-visible {
+  outline: 3px solid rgba(147, 166, 255, 0.6);
+  outline-offset: 3px;
+}
+
+.tl-bar.is-dragging .tl-bar-handle {
+  cursor: grabbing;
+  transform: scale(1.12);
+}
+
+/* No planned date yet: a hollow handle at the start */
+.tl-bar-handle.is-unset {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--line-strong);
+}
+
+/* The date shown above the handle */
+.tl-bar-bubble {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 9px;
+  font: 700 0.78rem var(--font-body);
+  color: var(--bg);
+  white-space: nowrap;
+  background: var(--amber);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.tl-bar-handle.is-unset .tl-bar-bubble {
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+}
+
+.tl-bar-bubble.is-start { transform: translateX(-14px); }
+.tl-bar-bubble.is-end   { transform: translateX(calc(-100% + 14px)); }
+
+/* Dates at each end, and the key */
+.tl-bar-scale,
+.tl-bar-legend {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.75rem;
+  color: var(--ink-3);
+}
+
+.tl-bar-scale {
+  padding: 0 4px;
+}
+
+.tl-bar-legend {
+  justify-content: flex-start;
+}
+
+.tl-bar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-key {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-text);
+}
+
+.tl-key-deadline {
+  background: var(--red);
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+.tl-key-planned {
+  width: 10px;
+  height: 10px;
+  background: var(--amber);
+}
+
+/* Planned date after your chosen deadline */
+.tl-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--amber);
+}
+
+.tl-warning .lucide {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
