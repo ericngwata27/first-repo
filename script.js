@@ -560,7 +560,10 @@ tabButtons.forEach(function (button) {
 // =========================================================
 // 5. THE 3D GLOBE (using the Globe.gl library)
 //
-// A dark, slowly spinning globe with glowing dots for your universities.
+// A slowly spinning globe with glowing dots for your universities.
+// The Earth is lit like the real thing: daylight where the sun is up right
+// now, city lights on the night side, a soft line between them, shiny
+// oceans and a blue glow around the edge (see "The Earth's look" below).
 // Dot colors (same as the legend):
 //   gold = your first choice (star it on its details card)
 //   red  = your date is under 15 days away, or overdue (see getMyDate)
@@ -568,7 +571,7 @@ tabButtons.forEach(function (button) {
 // Click a dot to fly to it and open its details card.
 //
 // The gear button opens the settings (saved in this browser):
-//   Spin, Satellite view, Borders, Arcs from home, Glow
+//   Spin, Satellite view (daylight everywhere), Borders, Arcs from home, Glow
 // =========================================================
 
 let globe = null;
@@ -576,11 +579,33 @@ let globe = null;
 // Where the globe pictures and country shapes come from (exact versions,
 // so an update to the libraries can't change the site by surprise)
 const GLOBE_FILES = {
+  // NASA pictures, 4096 x 2048 pixels: they load quickly, so the globe appears fast
   night: "https://unpkg.com/three-globe@2.45.2/example/img/earth-night.jpg",
-  satellite: "https://unpkg.com/three-globe@2.45.2/example/img/earth-blue-marble.jpg",
+  day: "https://unpkg.com/three-globe@2.45.2/example/img/earth-blue-marble.jpg",
+  water: "https://unpkg.com/three-globe@2.45.2/example/img/earth-water.png",   // white = ocean (for the shine)
   bumps: "https://unpkg.com/three-globe@2.45.2/example/img/earth-topology.png",
+  // Sharper 8192 x 4096 versions, kept in this website's "textures" folder.
+  // When they're there, they replace the 4K ones once downloaded.
+  // If they're missing, the 4K ones simply stay.
+  day8k: "textures/earth-day-8k.jpg",
+  night8k: "textures/earth-night-8k.jpg",
   borders: "https://unpkg.com/globe.gl@2.46.2/example/datasets/ne_110m_admin_0_countries.geojson",
 };
+
+// How close you can zoom in, as a height above the globe (1 = one globe
+// radius). The pictures only have so much detail, so we stop before they blur.
+const ZOOM_LIMITS = {
+  standard: 0.9,   // with the 4K pictures
+  sharp: 0.5,      // with the 8K pictures
+};
+let globeIsSharp = false;   // true once the 8K pictures are showing
+const GLOBE_RADIUS = 100;   // Globe.gl's globe is 100 units wide (from the center)
+
+// How high the camera stops when it flies to a university: close enough
+// to see the country, far enough that it stays sharp
+function focusAltitude() {
+  return globeIsSharp ? 0.8 : 1.15;
+}
 
 const PIN_COLORS = {
   firstChoice: "#f5c542",   // gold
@@ -596,7 +621,7 @@ function getGlobeSettings() {
   const saved = DataStore.read(STORAGE_KEYS.globeSettings, {});
   return {
     spin: typeof saved.spin === "boolean" ? saved.spin : !PREFERS_LESS_MOTION,
-    satellite: saved.satellite === true,     // the realistic daytime picture instead of the night one
+    satellite: saved.satellite === true,     // daylight everywhere instead of real day and night
     borders: saved.borders === true,
     arcs: saved.arcs === true,
     glow: saved.glow === true,               // cinematic bloom: off unless you turn it on (it's heavy on phones)
@@ -652,7 +677,7 @@ function makeGlobePin(point) {
     "</span>";
   pin.addEventListener("click", function (event) {
     event.stopPropagation();
-    globe.pointOfView({ lat: point.lat, lng: point.lng, altitude: 0.8 }, 1500);
+    globe.pointOfView({ lat: point.lat, lng: point.lng, altitude: focusAltitude() }, 1500);
     selectUniversity(point.id, false);       // opens the same details card as before
   });
   return pin;
@@ -672,10 +697,12 @@ if (typeof Globe === "undefined") {
   try {
     globe = Globe({ animateIn: true })(globeBox)
       .backgroundColor("rgba(0,0,0,0)")          // no starfield: the dark gradient behind shows through
-      .bumpImageUrl(GLOBE_FILES.bumps)           // mountains catch the light
+      .globeImageUrl(GLOBE_FILES.night)          // shown until the day/night look below is ready
+      .bumpImageUrl(GLOBE_FILES.bumps)
       .showAtmosphere(true)
-      .atmosphereColor("#1e90ff")
-      .atmosphereAltitude(0.2)
+      .atmosphereColor("#3a8bff")
+      .atmosphereAltitude(0.14)                  // a thin, crisp halo (the edge glow does the rest)
+      .onGlobeReady(function () { globeBox.classList.add("is-ready"); })   // fade in
       // The glowing dots
       .htmlElementsData([])
       .htmlLat("lat")
@@ -725,7 +752,11 @@ if (typeof Globe === "undefined") {
 
     // Sharp on retina screens, but not more than needed (saves battery)
     globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    setZoomLimit();
     globe.pointOfView({ lat: 30, lng: 10, altitude: 2.3 });
+
+    // Fade in even if the "ready" signal never comes (for example a slow picture)
+    setTimeout(function () { globeBox.classList.add("is-ready"); }, 4000);
   } catch (error) {
     // Happens on devices that can't draw 3D graphics (no WebGL)
     globe = null;
@@ -740,6 +771,147 @@ if (globe && "ResizeObserver" in window) {
     if (globeBox.clientWidth > 0) globe.width(globeBox.clientWidth).height(globeBox.clientHeight);
   }).observe(globeBox);
 }
+
+// ----- Zoom limit -----
+function setZoomLimit() {
+  if (!globe) return;
+  const limit = globeIsSharp ? ZOOM_LIMITS.sharp : ZOOM_LIMITS.standard;
+  globe.controls().minDistance = GLOBE_RADIUS * (1 + limit);
+}
+
+// ----- The Earth's look (a "shader": a small program the graphics card runs) -----
+// For every point on the globe it mixes:
+//   daylight picture   where the sun is up right now
+//   city lights        on the night side, with a soft line between the two
+//   ocean shine        a highlight where sunlight reflects off the water
+//   edge glow          a blue rim, brighter towards the edge of the globe
+// It needs three.js (loaded from the import map in index.html). If that
+// can't load, the globe keeps its plain night picture.
+const EARTH_VERTEX_SHADER = `
+  varying vec2 vUv;
+  varying vec3 vNormalWorld;
+  varying vec3 vPositionWorld;
+  void main() {
+    vUv = uv;
+    vNormalWorld = normalize(mat3(modelMatrix) * normal);
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vPositionWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const EARTH_FRAGMENT_SHADER = `
+  uniform sampler2D dayMap;
+  uniform sampler2D nightMap;
+  uniform sampler2D waterMap;
+  uniform vec3 sunDirection;
+  uniform float allDay;            // 1 = Satellite view (daylight everywhere)
+  varying vec2 vUv;
+  varying vec3 vNormalWorld;
+  varying vec3 vPositionWorld;
+
+  void main() {
+    vec3 normal = normalize(vNormalWorld);
+    vec3 toCamera = normalize(cameraPosition - vPositionWorld);
+    vec3 sun = normalize(mix(sunDirection, toCamera, allDay));   // Satellite view: lit from the front
+
+    // Day and night, with a soft line between them
+    float sunAmount = dot(normal, sun);
+    float dayAmount = smoothstep(-0.12, 0.22, sunAmount);
+    vec3 day = texture2D(dayMap, vUv).rgb * (0.3 + 0.75 * clamp(sunAmount, 0.0, 1.0));
+    vec3 night = texture2D(nightMap, vUv).rgb * 1.35 + vec3(0.004, 0.008, 0.02);
+    vec3 color = mix(night, day, dayAmount);
+
+    // Ocean shine
+    float water = texture2D(waterMap, vUv).r;
+    vec3 halfway = normalize(sun + toCamera);
+    float shine = pow(max(dot(normal, halfway), 0.0), 220.0) * water * dayAmount;
+    color += shine * vec3(0.55, 0.7, 0.9) * 0.45;
+
+    // Edge glow
+    float rim = pow(1.0 - max(dot(normal, toCamera), 0.0), 3.0);
+    color += rim * vec3(0.16, 0.42, 1.0) * 0.6;
+
+    gl_FragColor = vec4(color, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+let earthMaterial = null;   // the shader, once it's ready
+
+// Where the sun is overhead right now (roughly: good to within a degree)
+function sunPosition(date) {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const dayOfYear = (date.getTime() - start) / 86400000;
+  const lat = -23.44 * Math.cos((2 * Math.PI / 365) * (dayOfYear + 10));
+  const hours = date.getUTCHours() + date.getUTCMinutes() / 60;
+  let lng = (12 - hours) * 15;
+  if (lng < -180) lng += 360;
+  return { lat: lat, lng: lng };
+}
+
+function updateSun() {
+  if (!earthMaterial) return;
+  const sun = sunPosition(new Date());
+  const point = globe.getCoords(sun.lat, sun.lng);
+  const length = Math.hypot(point.x, point.y, point.z) || 1;
+  earthMaterial.uniforms.sunDirection.value.set(point.x / length, point.y / length, point.z / length);
+}
+
+function setupEarthLook() {
+  import("three").then(function (THREE) {
+    const renderer = globe.renderer();
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+
+    // Load a picture as a texture, with the settings that keep it crisp
+    function loadTexture(url, isColor) {
+      return new Promise(function (resolve, reject) {
+        loader.load(url, function (texture) {
+          if (isColor) texture.colorSpace = THREE.SRGBColorSpace;
+          texture.anisotropy = renderer.capabilities.getMaxAnisotropy();   // sharp at the edges of the globe too
+          resolve(texture);
+        }, undefined, reject);
+      });
+    }
+
+    // 1. The 4K pictures first, so the new look appears quickly
+    return Promise.all([loadTexture(GLOBE_FILES.day, true), loadTexture(GLOBE_FILES.night, true), loadTexture(GLOBE_FILES.water, false)])
+      .then(function (textures) {
+        earthMaterial = new THREE.ShaderMaterial({
+          uniforms: {
+            dayMap: { value: textures[0] },
+            nightMap: { value: textures[1] },
+            waterMap: { value: textures[2] },
+            sunDirection: { value: new THREE.Vector3(1, 0, 0) },
+            allDay: { value: getGlobeSettings().satellite ? 1 : 0 },
+          },
+          vertexShader: EARTH_VERTEX_SHADER,
+          fragmentShader: EARTH_FRAGMENT_SHADER,
+        });
+        globe.globeMaterial(earthMaterial);
+        updateSun();
+        setInterval(updateSun, 60000);   // the sun moves: update once a minute
+
+        // 2. Then the 8K pictures, if they're on the website and this device can handle them
+        // (Only on a real web address: a page opened straight from a file can't load them.)
+        if (renderer.capabilities.maxTextureSize < 8192 || !/^https?:$/.test(location.protocol)) return;
+        return Promise.all([loadTexture(GLOBE_FILES.day8k, true), loadTexture(GLOBE_FILES.night8k, true)])
+          .then(function (sharp) {
+            earthMaterial.uniforms.dayMap.value.dispose();
+            earthMaterial.uniforms.nightMap.value.dispose();
+            earthMaterial.uniforms.dayMap.value = sharp[0];
+            earthMaterial.uniforms.nightMap.value = sharp[1];
+            globeIsSharp = true;
+            setZoomLimit();
+          })
+          .catch(function () { /* no 8K pictures on the website yet: the 4K ones stay */ });
+      });
+  }).catch(function () { /* three.js couldn't load: the plain night picture stays */ });
+}
+
+if (globe) setupEarthLook();
 
 // ----- Glow (bloom) -----
 // A soft cinematic glow on the brightest parts (city lights, the atmosphere).
@@ -780,7 +952,11 @@ function applyGlobeSettings() {
   if (!globe) return;
   const settings = getGlobeSettings();
 
-  globe.globeImageUrl(settings.satellite ? GLOBE_FILES.satellite : GLOBE_FILES.night);
+  if (earthMaterial) {
+    earthMaterial.uniforms.allDay.value = settings.satellite ? 1 : 0;
+  } else {
+    globe.globeImageUrl(settings.satellite ? GLOBE_FILES.day : GLOBE_FILES.night);
+  }
   // Spin, but not while a university's details are open
   globe.controls().autoRotate = settings.spin && selectedId === null;
   setGlow(settings.glow);
@@ -2567,7 +2743,7 @@ function selectUniversity(id, flyToIt) {
   if (!uni) return;
 
   if (globe && flyToIt && Number.isFinite(uni.lat)) {
-    globe.pointOfView({ lat: uni.lat, lng: uni.lng, altitude: 0.8 }, 1500);
+    globe.pointOfView({ lat: uni.lat, lng: uni.lng, altitude: focusAltitude() }, 1500);
   }
 
   // On small screens the panel is under the map, so scroll to it

@@ -11,12 +11,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Figtree:wght@400;500;600&display=swap">
 
-  <!-- Where the optional "Glow" effect loads its three.js files from
-       (the same three.js version Globe.gl is built with) -->
+  <!-- Where the globe's day/night look and the optional "Glow" effect load
+       their three.js files from (the same three.js version Globe.gl is built with) -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.185.0/build/three.module.js",
+        "three": "https://unpkg.com/three@0.185.0/build/three.module.min.js",
         "three/addons/": "https://unpkg.com/three@0.185.0/examples/jsm/"
       }
     }
@@ -459,7 +459,7 @@
   <footer class="site-footer">
     <div class="container footer-inner">
       <p>&copy; <span id="year"></span> My Future Planner</p>
-      <p class="muted">Your data is saved in this browser only.</p>
+      <p class="muted">Your data is saved in this browser only. Earth imagery: NASA.</p>
     </div>
   </footer>
 
