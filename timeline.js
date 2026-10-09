@@ -1,12 +1,12 @@
 // =========================================================
 // MY FUTURE PLANNER - APPLICATION TIMELINE
 //
-// This file builds the Timeline tab. It loads after script.js
+// This file builds the Timeline tab. It loads last, after the other files
 // and reuses things from it: the `universities` list, DataStore,
 // STORAGE_KEYS, parseDate, daysUntil, formatDate, sortByDeadline,
 // makeElement, makeIcon, refreshIcons, showToast, intakeLabel, the
 // application date helpers (itemText, itemEndDate, cleanDateItem,
-// DATE_TYPES) and, from section 3b of script.js, the shared timeline
+// DATE_TYPES) and, from dates.js (section 3b), the shared timeline
 // data: MILESTONES, TimelineStore, cardDates, findTarget, todayText,
 // isDateText and isPastItem.
 //
@@ -52,7 +52,7 @@ const DATE_TYPE_LABELS = {
 
 // =========================================================
 // 2. DATE HELPERS
-// (More are in section 3b of script.js.)
+// (More are in dates.js, section 3b.)
 // =========================================================
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -260,13 +260,13 @@ function buildCard(uni) {
 
   left.append(datesHeading, generateBox, dateList, dateTools, rollingLine, planBox);
 
-  // Generate Timeline: add every date auto-fill found for this university
-  // (and its deadline from the Universities tab). Dates you added, your
-  // planned date and your milestones are never changed.
+  // Generate Timeline: add every date auto-fill found for this university.
+  // (The deadline from the Universities tab is always shown.) Dates you
+  // added, your planned date and your milestones are never changed.
   function generateTimeline() {
     entry.generated = true;
     saveAndRefresh();
-    const found = (uni.applicationDates || []).length + (uni.deadline ? 1 : 0);
+    const found = (uni.applicationDates || []).length;
     if (found === 0) {
       showToast("Auto-fill found no dates for " + uni.name + ". Add dates yourself, or use Search again on the Universities tab.", "circle-alert");
     } else {
@@ -429,7 +429,7 @@ function buildCard(uni) {
         showToast("Pick the date first.", "circle-alert");
         return;
       }
-      entry.manualDates.push({ id: "m" + Date.now(), label: nameInput.value.trim() || DATE_TYPE_LABELS[typeSelect.value],
+      entry.manualDates.push({ id: newId(), label: nameInput.value.trim() || DATE_TYPE_LABELS[typeSelect.value],
         campus: "", date: dateInput.value, type: typeSelect.value });
       saveAndRefresh();
     });
@@ -775,13 +775,13 @@ const timelineSummary = document.getElementById("timeline-summary");
 
 function drawSummary() {
   timelineSummary.innerHTML = "";
-  if (universities.length === 0) return;
+  if (state.universities.length === 0) return;
 
   const upcoming = [];   // things still to do, with a date
   let overdue = 0;
   const counts = {};
 
-  universities.forEach(function (uni) {
+  state.universities.forEach(function (uni) {
     const entry = TimelineStore.get(uni.id);
     counts[entry.status] = (counts[entry.status] || 0) + 1;
     if (FINISHED_STATUSES.indexOf(entry.status) !== -1) return;
@@ -952,14 +952,7 @@ function exportCalendar(unis, fileName) {
     return;
   }
 
-  const file = new Blob([buildIcs(events)], { type: "text/calendar;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(file);
-  link.download = fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+  downloadFile(buildIcs(events), fileName, "text/calendar;charset=utf-8");   // in profile.js, section 14
 
   showToast("Saved " + events.length + (events.length === 1 ? " date" : " dates") +
     " to " + fileName + ". Open the file to add them to your calendar.", "calendar-check");
@@ -975,14 +968,14 @@ const timelineEmpty = document.getElementById("timeline-empty");
 
 function drawTimeline() {
   // Forget timeline data for universities that were deleted
-  TimelineStore.removeMissing(universities.map(function (uni) { return uni.id; }));
+  TimelineStore.removeMissing(state.universities.map(function (uni) { return uni.id; }));
 
   timelineList.innerHTML = "";
-  timelineEmpty.hidden = universities.length > 0;
+  timelineEmpty.hidden = state.universities.length > 0;
 
   // Soonest date first (your planned date, chosen deadline or next deadline),
   // like the university list
-  sortByDeadline(universities).forEach(function (uni) {
+  sortByDeadline(state.universities).forEach(function (uni) {
     timelineList.append(buildCard(uni));
   });
 
@@ -999,7 +992,10 @@ document.addEventListener("tab-opened", function (event) {
 });
 
 document.getElementById("export-all-ics").addEventListener("click", function () {
-  exportCalendar(universities, "university-applications.ics");
+  exportCalendar(state.universities, "university-applications.ics");
 });
 
-drawTimeline();
+// Draw once the saved data has loaded (see startApp in main.js)
+appReady.then(function (loaded) {
+  if (loaded) drawTimeline();
+});

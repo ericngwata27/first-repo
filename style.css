@@ -23,6 +23,9 @@
    19. Generate Timeline
    20. Background texture, glowing divider and hero band
    21. Collapsible Timeline cards
+   22. Your data (export / import)
+   23. Loading, saved and error states
+   24. Welcome band (first run)
    ========================================================= */
 
 
@@ -32,7 +35,7 @@
    one value here changes it across the whole site.
    ========================================================= */
 :root {
-  /* DARK THEME (new): the whole site gets its colors from these tokens,
+  /* DARK THEME: the whole site gets its colors from these tokens,
      so switching to dark mostly meant changing the values below. */
 
   /* Tell the browser the page is dark, so built-in parts like the
@@ -45,7 +48,7 @@
   --surface-2: #1d2230;   /* inputs and subtle fills */
   --ink: #e9ecf3;         /* main text (bright, easy to read) */
   --ink-2: #a5adbf;       /* secondary text */
-  --ink-3: #737c92;       /* hints and placeholders */
+  --ink-3: #868fa5;       /* hints and placeholders (4.9:1 or better on every background: WCAG AA) */
   --line: #272d3b;        /* borders */
   --line-strong: #3a4256; /* borders on hover */
 
@@ -720,13 +723,6 @@ textarea:focus-visible {
 }
 
 /* Colored strip across the top of the panel showing the deadline status */
-.panel-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
 .panel-title {
   font-size: 1.35rem;
   padding-right: 36px; /* room for the close button */
@@ -1466,7 +1462,7 @@ textarea {
 
 
 /* =========================================================
-   15. AUTO-FILL (new)
+   15. AUTO-FILL
    Styles for the settings box, the loading animation, the
    "Verified from official sources" label and the sources list.
    ========================================================= */
@@ -1729,7 +1725,7 @@ textarea {
 
 
 /* =========================================================
-   16. APPLICATION TIMELINE (new)
+   16. APPLICATION TIMELINE
    The Timeline tab: summary, timeline cards, the mini timeline
    bar and the milestone checklist. Uses the same color tokens
    as the rest of the site.
@@ -2026,7 +2022,7 @@ textarea {
 
 
 /* =========================================================
-   17. ACADEMIC PROFILE (new)
+   17. ACADEMIC PROFILE
    ========================================================= */
 
 /* The four academic profile boxes on the Profile tab */
@@ -2058,7 +2054,7 @@ textarea {
 
 
 /* =========================================================
-   18. APPLICATION DATES AND THE TIMELINE SLIDER (new)
+   18. APPLICATION DATES AND THE TIMELINE SLIDER
    The list of dates on each Timeline card, and the bar you
    drag to set your planned submission date.
    ========================================================= */
@@ -2564,7 +2560,7 @@ button.tl-date-main:focus-visible {
 
 
 /* =========================================================
-   19. GENERATE TIMELINE (new)
+   19. GENERATE TIMELINE
    ========================================================= */
 
 .tl-generate {
@@ -2587,7 +2583,7 @@ button.tl-date-main:focus-visible {
 
 
 /* =========================================================
-   20. BACKGROUND TEXTURE, GLOWING DIVIDER AND HERO BAND (new)
+   20. BACKGROUND TEXTURE, GLOWING DIVIDER AND HERO BAND
    All drawn with CSS: no image files to download, sharp on any screen.
    ========================================================= */
 
@@ -2751,7 +2747,7 @@ body::before {
 
 
 /* =========================================================
-   21. COLLAPSIBLE TIMELINE CARDS (new)
+   21. COLLAPSIBLE TIMELINE CARDS
    Closed: one summary row (name, course, deadline, planned date,
    status, arrow). Click it to slide the details open.
    ========================================================= */
@@ -2949,4 +2945,174 @@ body::before {
   .tl-card.is-open .tl-details-inner {
     padding-bottom: 18px;
   }
+}
+
+
+/* =========================================================
+   22. YOUR DATA (export / import on the Profile tab)
+   ========================================================= */
+
+.data-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.data-note {
+  font-size: 0.85rem;
+}
+
+
+/* =========================================================
+   23. LOADING, SAVED AND ERROR STATES
+   ========================================================= */
+
+/* The status in the header: a colored dot and a word */
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 0 auto;     /* pushed to the right, next to the tabs */
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.save-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.save-status[data-state="loading"] .save-dot {
+  background: var(--ink-3);
+  animation: save-pulse 1s ease-in-out infinite alternate;
+}
+
+.save-status[data-state="error"] {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.save-status[data-state="error"] .save-dot {
+  background: var(--amber);
+}
+
+@keyframes save-pulse {
+  to { opacity: 0.3; }
+}
+
+/* While loading, don't say "No universities yet": we don't know yet */
+.is-loading .empty-state {
+  visibility: hidden;
+}
+
+/* The banner shown if your data couldn't be loaded */
+.load-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--amber);
+  border-radius: 12px;
+  background: var(--amber-soft);
+  color: var(--ink);
+}
+
+.load-error[hidden] {
+  display: none;
+}
+
+.load-error svg {
+  flex: none;
+  color: var(--amber);
+}
+
+.load-error p {
+  flex: 1;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-status[data-state="loading"] .save-dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .load-error {
+    flex-wrap: wrap;
+  }
+}
+
+/* Phones: text boxes at 16px so iPhones don't zoom in when you tap one,
+   and small buttons tall enough to tap comfortably */
+@media (max-width: 600px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .button-small {
+    min-height: 40px;
+  }
+
+  .data-card .button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+
+/* =========================================================
+   24. WELCOME BAND (first run)
+   The hero only shows until you add your first university.
+   ========================================================= */
+
+.is-loading .hero,
+.has-universities .hero {
+  display: none;
+}
+
+.welcome-steps {
+  margin: 16px 0 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+.welcome-steps li span.muted {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.welcome-link {
+  font: 600 0.95rem var(--font-body);
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.welcome-link:hover {
+  color: var(--ink);
+}
+
+.welcome-text {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* A tick once the start date is set */
+.welcome-steps li.is-done .welcome-link {
+  color: var(--green);
+  text-decoration: line-through;
 }

@@ -1,0 +1,16 @@
+{
+  "name": "my-future-planner",
+  "private": true,
+  "description": "University admissions planner: a 3D globe of your universities, every application date, and your own timeline.",
+  "scripts": {
+    "start": "node tests/server.mjs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "globe.gl": "2.46.2",
+    "lucide": "0.453.0",
+    "three": "0.185.0",
+    "three-globe": "2.45.2"
+  }
+}

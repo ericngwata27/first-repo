@@ -25,7 +25,7 @@
   <!-- Our own stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="is-loading">   <!-- main.js removes is-loading once your data is in -->
 
   <!-- =========================================================
        HEADER: logo on the left, tabs on the right.
@@ -41,12 +41,17 @@
         </span>
       </div>
 
+      <!-- Shows whether your data is loading, saved, or couldn't be saved (main.js) -->
+      <p class="save-status" id="save-status" role="status" data-state="loading">
+        <span class="save-dot" aria-hidden="true"></span><span id="save-status-text">Loading…</span>
+      </p>
+
       <!-- The tabs. data-tab says which section each one opens. -->
       <nav class="tabs" aria-label="Sections">
         <button class="tab is-active" data-tab="universities-tab" aria-selected="true">
           <i data-lucide="map"></i> Universities
         </button>
-        <!-- NEW: Application Timeline page -->
+        <!-- Application Timeline page -->
         <button class="tab" data-tab="timeline-tab" aria-selected="false">
           <i data-lucide="calendar-check"></i> Timeline
         </button>
@@ -59,6 +64,13 @@
 
   <main class="container">
 
+    <!-- Shown only if your saved data couldn't be loaded (main.js) -->
+    <div class="load-error" id="load-error" role="alert" hidden>
+      <i data-lucide="circle-alert"></i>
+      <p><strong>We couldn't load your saved data.</strong> Nothing has been changed or saved. Try again in a moment.</p>
+      <button class="button button-small" id="retry-load" type="button">Try again</button>
+    </div>
+
     <!-- =========================================================
          TAB 1: UNIVERSITIES
          ========================================================= -->
@@ -66,11 +78,27 @@
 
       <!-- ----- Hero band: a headline beside a planet's glowing edge.
            Drawn entirely with CSS (style.css section 20), no images. ----- -->
-      <div class="hero">
+      <!-- The welcome band. Only shown until you add your first university
+           (universities.js adds "has-universities" to <body> then). -->
+      <div class="hero" id="welcome">
         <div class="hero-text">
           <p class="hero-eyebrow">Admissions planner</p>
           <h1 class="hero-title">Every deadline, <span>one globe.</span></h1>
-          <p class="hero-subtitle">Your universities, their rounds and your own plan, in one calm place.</p>
+          <p class="hero-subtitle">Your universities, their rounds and your own plan, in one calm place. Start in three steps:</p>
+          <ol class="welcome-steps">
+            <li id="welcome-step-start">
+              <button class="welcome-link" type="button" data-go="profile-start">Set your intended start date</button>
+              <span class="muted">so auto-fill finds the right year's deadlines</span>
+            </li>
+            <li>
+              <button class="welcome-link" type="button" data-go="name">Add a university and course</button>
+              <span class="muted">it appears on the globe</span>
+            </li>
+            <li>
+              <span class="welcome-text">Plan it on the Timeline</span>
+              <span class="muted">pick a deadline and drag the slider to your date</span>
+            </li>
+          </ol>
         </div>
         <div class="hero-planet" aria-hidden="true"></div>
       </div>
@@ -108,7 +136,7 @@
           <label><input type="checkbox" data-globe-setting="glow"> Glow</label>
         </div>
 
-        <!-- Details of the selected university. script.js fills in .panel-body -->
+        <!-- Details of the selected university. universities.js fills in .panel-body -->
         <aside id="details-panel" class="details-panel" aria-live="polite">
           <button class="icon-button panel-close" id="close-panel" title="Close" aria-label="Close details">
             <i data-lucide="x"></i>
@@ -131,7 +159,7 @@
       <div class="work-area">
 
         <!-- ===== Add / edit form =====
-             NEW: you only type the university and course. Pressing
+             You only type the university and course. Pressing
              "Find details" searches online and fills in everything else. -->
         <section class="card form-card" id="form-card">
           <div class="card-header">
@@ -189,7 +217,7 @@
               </div>
             </fieldset>
 
-            <!-- Loading animation and result label. script.js fills this in. -->
+            <!-- Loading animation and result label. universities.js fills this in. -->
             <div id="lookup-status" class="lookup-status" hidden></div>
 
             <!-- Step 2: everything below is filled in automatically.
@@ -279,11 +307,11 @@
           <div class="card-header">
             <div>
               <h2>My universities</h2>
-              <p class="muted">Sorted by deadline, soonest first.</p>
+              <p class="muted">Soonest first, by your planned date, chosen deadline or next deadline.</p>
             </div>
           </div>
 
-          <!-- script.js adds one card per university here -->
+          <!-- universities.js adds one card per university here -->
           <ul id="uni-list" class="uni-list"></ul>
 
           <!-- Shown when there are no universities yet -->
@@ -298,7 +326,7 @@
     </section>
 
     <!-- =========================================================
-         TAB 2: APPLICATION TIMELINE (new)
+         TAB 2: APPLICATION TIMELINE
          timeline.js builds one card per saved university inside
          #timeline-list. Everything here is saved automatically.
          ========================================================= -->
@@ -341,7 +369,7 @@
       </div>
       <div class="glow-divider" aria-hidden="true"></div>
 
-      <!-- ----- NEW Section: Your academic profile -----
+      <!-- ----- Section: Your academic profile -----
            Sent with every auto-fill search, so deadlines are for your start
            date and entry requirements are in your school system.
            It never decides your campus: every campus's dates are shown on the Timeline. -->
@@ -466,6 +494,20 @@
           </div>
         </div>
       </section>
+
+      <!-- ----- Section: Your data (export / import) ----- -->
+      <section class="profile-section" id="your-data">
+        <div class="section-heading">
+          <h3>Your data</h3>
+          <p class="muted">Everything is saved in this browser only. Export a copy to keep it safe or to move it to another browser. Your API key is never included.</p>
+        </div>
+        <div class="card data-card">
+          <button class="button" id="export-data" type="button"><i data-lucide="download"></i> Export my data</button>
+          <button class="button" id="import-data" type="button"><i data-lucide="upload"></i> Import data</button>
+          <input id="import-file" type="file" accept=".json,application/json" hidden>
+          <p class="muted data-note">Importing replaces what's saved here.</p>
+        </div>
+      </section>
     </section>
 
   </main>
@@ -481,13 +523,19 @@
   <!-- Pop-up messages ("toasts") appear in this corner -->
   <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
-  <!-- Libraries: they must load BEFORE script.js uses them -->
+  <!-- Libraries: they must load BEFORE our code uses them -->
   <script src="https://unpkg.com/globe.gl@2.46.2/dist/globe.gl.min.js"></script>   <!-- the 3D globe -->
   <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script> <!-- the icons -->
 
-  <!-- Our own code -->
-  <script src="script.js"></script>
-  <!-- NEW: the Application Timeline page (uses helpers from script.js, so it loads after it) -->
-  <script src="timeline.js"></script>
+  <!-- Our own code, in this order (each file uses the ones above it) -->
+  <script src="store.js"></script>         <!-- your saved data: state, loadState(), save() -->
+  <script src="helpers.js"></script>       <!-- small tools, tabs, toasts -->
+  <script src="dates.js"></script>         <!-- deadlines and "your date" -->
+  <script src="globe.js"></script>         <!-- the 3D globe -->
+  <script src="autofill.js"></script>      <!-- auto-fill: runAutoFill() -->
+  <script src="universities.js"></script>  <!-- the Universities page -->
+  <script src="profile.js"></script>       <!-- the Profile tab, export / import -->
+  <script src="main.js"></script>          <!-- starts the app -->
+  <script src="timeline.js"></script>      <!-- the Timeline page -->
 </body>
 </html>

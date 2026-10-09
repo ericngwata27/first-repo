@@ -1,0 +1,11 @@
+# Installed by "npm install" (test tools and local copies of the libraries)
+node_modules/
+
+# Test output
+test-results/
+playwright-report/
+
+# Editor and system files
+.DS_Store
+.vscode/
+.idea/
