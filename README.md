@@ -10,7 +10,7 @@ Everything is saved **in your browser only** (`localStorage`) for now. Use **Exp
 
 ## Live site
 
-**https://ericngwata27.github.io/first-repo/**
+**https://ericngwata27.github.io/planmyfuture/**
 
 It's hosted free on GitHub Pages and updates by itself about a minute after every merge into `main`. Each visitor's data is still saved only in their own browser.
 
