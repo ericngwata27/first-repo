@@ -23,6 +23,7 @@
    19. Generate Timeline
    20. Background texture, glowing divider and hero band
    21. Collapsible Timeline cards
+   22. Your data (export / import)
    ========================================================= */
 
 
@@ -2942,4 +2943,20 @@ body::before {
   .tl-card.is-open .tl-details-inner {
     padding-bottom: 18px;
   }
+}
+
+
+/* =========================================================
+   22. YOUR DATA (export / import on the Profile tab)
+   ========================================================= */
+
+.data-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.data-note {
+  font-size: 0.85rem;
 }

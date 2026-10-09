@@ -952,14 +952,7 @@ function exportCalendar(unis, fileName) {
     return;
   }
 
-  const file = new Blob([buildIcs(events)], { type: "text/calendar;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(file);
-  link.download = fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+  downloadFile(buildIcs(events), fileName, "text/calendar;charset=utf-8");   // in script.js, section 14
 
   showToast("Saved " + events.length + (events.length === 1 ? " date" : " dates") +
     " to " + fileName + ". Open the file to add them to your calendar.", "calendar-check");

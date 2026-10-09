@@ -341,7 +341,7 @@
       </div>
       <div class="glow-divider" aria-hidden="true"></div>
 
-      <!-- ----- NEW Section: Your academic profile -----
+      <!-- ----- Section: Your academic profile -----
            Sent with every auto-fill search, so deadlines are for your start
            date and entry requirements are in your school system.
            It never decides your campus: every campus's dates are shown on the Timeline. -->
@@ -464,6 +464,20 @@
               <button class="button button-small copy-button" data-target="profile-snippets"><i data-lucide="copy"></i> <span>Copy to clipboard</span></button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- ----- Section: Your data (export / import) ----- -->
+      <section class="profile-section" id="your-data">
+        <div class="section-heading">
+          <h3>Your data</h3>
+          <p class="muted">Everything is saved in this browser only. Export a copy to keep it safe or to move it to another browser. Your API key is never included.</p>
+        </div>
+        <div class="card data-card">
+          <button class="button" id="export-data" type="button"><i data-lucide="download"></i> Export my data</button>
+          <button class="button" id="import-data" type="button"><i data-lucide="upload"></i> Import data</button>
+          <input id="import-file" type="file" accept=".json,application/json" hidden>
+          <p class="muted data-note">Importing replaces what's saved here.</p>
         </div>
       </section>
     </section>

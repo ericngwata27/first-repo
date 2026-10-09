@@ -224,3 +224,40 @@ test("deleting a university removes it everywhere", async ({ page }) => {
   await expect(page.locator(".tl-card")).toHaveCount(1);
   expect(page.errors).toEqual([]);
 });
+
+test("export and import move all your data (but never the API key)", async ({ page }) => {
+  await openWith(page, {
+    universities: [ESCP],
+    timeline: { 1: { generated: true, status: "applying" } },
+    apiKey: "sk-ant-secret",
+  });
+  await openTab(page, "Profile");
+  await page.fill("#profile-personal", "I love economics.");
+
+  // Export
+  const download = page.waitForEvent("download");
+  await page.click("#export-data");
+  const file = await (await download).path();
+  const text = await (await import("node:fs/promises")).readFile(file, "utf8");
+  const data = JSON.parse(text);
+  expect(data).toMatchObject({ app: "my-future-planner", version: 1, profile: { personal: "I love economics." } });
+  expect(data.universities[0].name).toBe("ESCP Business School");
+  expect(data.timeline["1"].status).toBe("applying");
+  expect(text).not.toContain("sk-ant-secret");
+
+  // Import it into an empty browser
+  await openWith(page, {});
+  await openTab(page, "Profile");
+  await page.locator("#import-file").setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(text) });
+  await expect(page.locator("#profile-personal")).toHaveValue("I love economics.");
+  await expect(page.locator("#stat-total")).toHaveText("1");
+  await openTab(page, "Timeline");
+  await expect(card(page, 1).locator(".tl-status-label")).toHaveText("Applying");
+
+  // A file that isn't ours changes nothing
+  await openTab(page, "Profile");
+  await page.locator("#import-file").setInputFiles({ name: "x.json", mimeType: "application/json", buffer: Buffer.from('{"hello": 1}') });
+  await expect(page.locator(".toast.is-warning")).toContainText("isn't a My Future Planner export");
+  await expect(page.locator("#stat-total")).toHaveText("1");
+  expect(page.errors).toEqual([]);
+});

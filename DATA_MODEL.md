@@ -128,6 +128,19 @@ Saved under `future-planner-academic-profile`. It's sent with every auto-fill se
 
 The API key and the search cache are never exported.
 
+**Import data** checks the file first: `app` must be `my-future-planner`, `version` must not be newer than the app's, and `universities` must be a list. Unknown fields in the profile and settings are dropped. Importing **replaces** everything saved in the browser except the API key, and asks first if anything is there.
+
+## Updating old data (and retiring that code)
+
+Data saved by older versions is updated to the current format once, at startup, by `upgradeOldData()` in `script.js`. Imports run through it too. It covers:
+
+- number IDs turned into text
+- `admissionsRounds` / `admissionsType` / `recommendedWindow` turned into `applicationDates` and `rolling` (`migrateUniversity`)
+- old timeline entries (`TimelineStore.migrate`)
+- marking timelines that existed before **Generate Timeline** as generated (`markExistingGenerated`, `timeline-version` 2)
+
+An exported file is always in the current format. Once everyone's data has been exported and re-imported (or moved to the backend), these updates can be deleted, leaving `upgradeOldData()` empty.
+
 ---
 
 ## Future backend tables
