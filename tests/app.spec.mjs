@@ -2,7 +2,7 @@
 //
 // Each test opens the website in a real (headless) Chrome, clicks around
 // like a person would, and checks what's on screen and what was saved.
-import { test, expect, openWith, openTab, ESCP, ESADE } from "./helpers.mjs";
+import { test, expect, openWith, openTab, signInAs, ESCP, ESADE } from "./helpers.mjs";
 
 // ----- Fake answers for the outside services used when adding a university -----
 
@@ -281,5 +281,32 @@ test("the header says when your changes are saved, or can't be", async ({ page }
   await expect(status).toHaveAttribute("data-state", "error");
   await expect(status).toHaveText("Not saved");
   await expect(page.locator(".toast.is-warning")).toContainText("didn't save that change");
+  expect(page.errors).toEqual([]);
+});
+
+test("signing in sends an email link", async ({ page }) => {
+  let sent = null;
+  await page.route(/supabase\.co\/auth\/v1\/otp/, (route) => {
+    sent = route.request().postDataJSON();
+    return route.fulfill({ json: {} });
+  });
+  await openWith(page, {});
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.getByRole("button", { name: "Email me a link" }).click();
+  await expect(page.locator("#account-dialog")).toContainText("Check your email");
+  expect(sent.email).toBe("student@example.com");
+  expect(page.errors).toEqual([]);
+});
+
+test("a signed-in person sees their email and can sign out", async ({ page }) => {
+  await page.route(/supabase\.co\/auth\/v1\/logout/, (route) => route.fulfill({ status: 204, body: "" }));
+  await signInAs(page, "student@example.com");
+  await openWith(page, {});
+  const button = page.locator("#account-button");
+  await expect(button).toHaveText("student@example.com");
+  await button.click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(button).toHaveText("Sign in");
   expect(page.errors).toEqual([]);
 });

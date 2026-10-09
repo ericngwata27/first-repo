@@ -145,16 +145,20 @@ An exported file is always in the current format. Once everyone's data has been 
 
 ---
 
-## Future backend tables
+## Backend (Supabase)
 
-| Table | From | Key |
+The database setup is in [`supabase/schema.sql`](supabase/schema.sql). There is **one table, `planner_data`, with one row per person**, holding the same parts as the export file:
+
+| Column | Type | Holds |
 |---|---|---|
-| `users` | (new) | `id` |
-| `universities` | section 1 (without `applicationDates`) | `id`, `user_id` |
-| `application_dates` | section 2 | `id`, `university_id` |
-| `applications` | section 3 (one row per university) | `university_id` |
-| `manual_dates` | section 3 `manualDates` | `id`, `university_id` |
-| `milestones` | section 4 | `university_id`, `key` |
-| `profiles` | sections 5 and 6 | `user_id` |
-| `settings` | section 7 (without the API key) | `user_id` |
-| `search_cache` | section 7, shared between users | search key |
+| `user_id` | uuid (key) | The signed-in person (Supabase Auth) |
+| `universities` | jsonb | Section 1 (with 2 inside) |
+| `timeline` | jsonb | Sections 3 and 4 |
+| `profile` | jsonb | Section 5 |
+| `academic_profile` | jsonb | Section 6 |
+| `settings` | jsonb | `{ globe }` from section 7. Never the API key. |
+| `updated_at` | timestamptz | When it last changed |
+
+Row Level Security means each person can only read and change their own row. This keeps the website's `save("part")` a one-column update. Separate tables (universities, milestones, …) can come later if the planner ever needs to search or share across people.
+
+Still to come: a shared `search_cache` table and a daily auto-fill limit, when auto-fill moves to the server.

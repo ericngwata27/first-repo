@@ -46,6 +46,11 @@
         <span class="save-dot" aria-hidden="true"></span><span id="save-status-text">Loading…</span>
       </p>
 
+      <!-- Sign in / your account (auth.js). Hidden if the Supabase library didn't load. -->
+      <button class="account-button" id="account-button" type="button" aria-haspopup="dialog">
+        <i data-lucide="user-round"></i> <span id="account-label">Sign in</span>
+      </button>
+
       <!-- The tabs. data-tab says which section each one opens. -->
       <nav class="tabs" aria-label="Sections">
         <button class="tab is-active" data-tab="universities-tab" aria-selected="true">
@@ -520,12 +525,42 @@
     </div>
   </footer>
 
+  <!-- The sign-in window (auth.js shows one of its three parts) -->
+  <dialog class="account-dialog" id="account-dialog" aria-labelledby="account-title">
+    <button class="icon-button account-close" id="account-close" type="button" aria-label="Close"><i data-lucide="x"></i></button>
+
+    <div data-view="sign-in">
+      <h2 id="account-title">Sign in</h2>
+      <p class="muted">We'll email you a link. No password needed. New here? The same link creates your account.</p>
+      <form id="sign-in-form" class="sign-in-form" novalidate>
+        <label for="sign-in-email">Email</label>
+        <input id="sign-in-email" type="email" autocomplete="email" placeholder="name@example.com" required>
+        <button class="button button-primary" id="sign-in-submit" type="submit"><i data-lucide="mail"></i> Email me a link</button>
+      </form>
+      <p class="muted account-note">For now your planner still saves in this browser. Saving it to your account is coming next.</p>
+    </div>
+
+    <div data-view="sent" hidden>
+      <h2>Check your email</h2>
+      <p>We sent a sign-in link to <strong id="sent-email"></strong>. Open it to finish signing in.</p>
+      <p class="muted account-note">Nothing there? Check your spam folder, or wait a minute and try again.</p>
+    </div>
+
+    <div data-view="signed-in" hidden>
+      <h2>Your account</h2>
+      <p>Signed in as <strong id="account-email"></strong>.</p>
+      <p class="muted account-note">Your planner still saves in this browser for now. Saving it to your account is coming next.</p>
+      <button class="button" id="sign-out" type="button"><i data-lucide="log-out"></i> Sign out</button>
+    </div>
+  </dialog>
+
   <!-- Pop-up messages ("toasts") appear in this corner -->
   <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
   <!-- Libraries: they must load BEFORE our code uses them -->
   <script src="https://unpkg.com/globe.gl@2.46.2/dist/globe.gl.min.js"></script>   <!-- the 3D globe -->
   <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script> <!-- the icons -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script> <!-- accounts -->
 
   <!-- Our own code, in this order (each file uses the ones above it) -->
   <script src="store.js"></script>         <!-- your saved data: state, loadState(), save() -->
@@ -535,6 +570,7 @@
   <script src="autofill.js"></script>      <!-- auto-fill: runAutoFill() -->
   <script src="universities.js"></script>  <!-- the Universities page -->
   <script src="profile.js"></script>       <!-- the Profile tab, export / import -->
+  <script src="auth.js"></script>          <!-- signing in (Supabase) -->
   <script src="main.js"></script>          <!-- starts the app -->
   <script src="timeline.js"></script>      <!-- the Timeline page -->
 </body>

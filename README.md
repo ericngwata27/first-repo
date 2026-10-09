@@ -52,6 +52,8 @@ The tests (`tests/app.spec.mjs`) open the site in headless Chrome and check the 
 | `autofill.js` | Auto-fill (Wikidata, Wikipedia, Claude). `runAutoFill()` is the one entry point, and the only code that uses the API key |
 | `universities.js` | The Universities page: form, list, details panel, stats |
 | `profile.js` | The Profile tab, plus Export / Import |
+| `auth.js` | Signing in with an email link (Supabase) |
+| `supabase/schema.sql` | The database setup: paste it into Supabase's SQL Editor |
 | `main.js` | Starts the app: loads data, updates old data, draws everything |
 | `timeline.js` | The Timeline page (cards, dates, slider, milestones, calendar export) |
 | `textures/` | Optional 8K globe pictures (see its README) |

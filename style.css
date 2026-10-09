@@ -26,6 +26,7 @@
    22. Your data (export / import)
    23. Loading, saved and error states
    24. Welcome band (first run)
+   25. Sign in
    ========================================================= */
 
 
@@ -3115,4 +3116,120 @@ body::before {
 .welcome-steps li.is-done .welcome-link {
   color: var(--green);
   text-decoration: line-through;
+}
+
+
+/* =========================================================
+   25. SIGN IN
+   ========================================================= */
+
+/* The "Sign in" / your-email button in the header */
+.account-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font: 600 0.85rem var(--font-body);
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+
+.account-button:hover {
+  background: var(--gray-soft);
+  color: var(--ink);
+}
+
+.account-button[hidden] {
+  display: none;
+}
+
+.account-button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Long email addresses get "…" */
+.account-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-button.is-signed-in {
+  color: var(--accent-text);
+  border-color: var(--accent-text);
+}
+
+/* The sign-in window */
+.account-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+
+.account-dialog::backdrop {
+  background: rgba(4, 6, 12, 0.7);
+  backdrop-filter: blur(3px);
+}
+
+.account-dialog h2 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  margin: 0 0 8px;
+}
+
+.account-dialog p {
+  margin: 0 0 14px;
+}
+
+.account-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.sign-in-form {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.sign-in-form label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.sign-in-form .button {
+  justify-content: center;
+}
+
+.account-note {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .account-button {
+    max-width: 120px;
+  }
+
+  /* Phones: "Saved" becomes just the green dot so everything fits on one
+     row. (Screen readers still hear it; "Not saved" always shows in full.) */
+  .save-status:not([data-state="error"]) #save-status-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
