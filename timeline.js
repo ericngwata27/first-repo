@@ -260,13 +260,13 @@ function buildCard(uni) {
 
   left.append(datesHeading, generateBox, dateList, dateTools, rollingLine, planBox);
 
-  // Generate Timeline: add every date auto-fill found for this university
-  // (and its deadline from the Universities tab). Dates you added, your
-  // planned date and your milestones are never changed.
+  // Generate Timeline: add every date auto-fill found for this university.
+  // (The deadline from the Universities tab is always shown.) Dates you
+  // added, your planned date and your milestones are never changed.
   function generateTimeline() {
     entry.generated = true;
     saveAndRefresh();
-    const found = (uni.applicationDates || []).length + (uni.deadline ? 1 : 0);
+    const found = (uni.applicationDates || []).length;
     if (found === 0) {
       showToast("Auto-fill found no dates for " + uni.name + ". Add dates yourself, or use Search again on the Universities tab.", "circle-alert");
     } else {

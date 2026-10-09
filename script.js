@@ -6,10 +6,11 @@
 //   1. Saving and loading
 //   2. Small helpers
 //   3. Deadlines (how close, which color)
+//  3b. Your dates (the timeline data every page shares, and getMyDate)
 //   4. Tabs
-//   5. The map
+//   5. The 3D globe
 //   6. Finding a location's coordinates
-//   7. Auto-fill: searching online (new)
+//   7. Auto-fill: searching online
 //   8. The form (with validation and auto-fill)
 //   9. The university list
 //  10. The details panel
@@ -214,12 +215,6 @@ function getDeadlineStatus(dateText) {
   return { level: "later", label: label, days: days };
 }
 
-// The small colored label, e.g. "● 12 days left"
-function makeDeadlineChip(dateText) {
-  const status = getDeadlineStatus(dateText);
-  return makeElement("span", "chip level-" + status.level, status.label);
-}
-
 // Soonest date first (your date, see getMyDate); universities without one go last
 function sortByDeadline(list) {
   const dates = {};
@@ -413,8 +408,8 @@ function isPastItem(item) {
 }
 
 // ----- The dates for one university -----
-// The dates you added, plus (once you've clicked Generate Timeline)
-// every date auto-fill found and the deadline from the Universities tab.
+// The deadline from the Universities tab and the dates you added, plus
+// (once you've clicked Generate Timeline) every date auto-fill found.
 // Dates you deleted are left out.
 // Each one gets an id so it can be chosen or deleted.
 
@@ -434,8 +429,10 @@ function cardDates(uni, entry) {
     if (!dates.some(function (d) { return d.id === item.id; })) dates.push(item);
   });
 
-  // The deadline on the Universities tab, if it isn't in the list already
-  if (entry.generated && isDateText(uni.deadline) && !dates.some(function (d) { return d.type === "deadline" && d.date === uni.deadline; })) {
+  // The deadline on the Universities tab, if it isn't in the list already.
+  // It's yours (you can type it in the form), so it always counts, even
+  // before you click Generate Timeline.
+  if (isDateText(uni.deadline) && !dates.some(function (d) { return d.type === "deadline" && d.date === uni.deadline; })) {
     dates.push({ id: "official", label: "Application deadline", campus: "", date: uni.deadline,
       type: "deadline", sourceUrl: (uni.sources && uni.sources[0]) || "", approximate: false });
   }
@@ -1107,7 +1104,7 @@ async function findCoordinates(name, city, country) {
 
 
 // =========================================================
-// 7. AUTO-FILL: SEARCHING ONLINE FOR UNIVERSITY DATA (new)
+// 7. AUTO-FILL: SEARCHING ONLINE FOR UNIVERSITY DATA
 //
 // When you press "Find details", lookUpUniversity() runs two steps:
 //
@@ -2461,7 +2458,7 @@ function drawList() {
     deadlineSub.hidden = !text.sub;
 
     const nameRow = makeElement("span", "uni-name", uni.name);
-    // NEW: a small green shield if the details came from the official website
+    // a small green shield if the details came from the official website
     if (uni.verified) {
       const mark = makeElement("span", "verified-mark");
       mark.title = "Verified from official sources";
@@ -2586,7 +2583,7 @@ function makeAdmissionsSection(uni) {
   return section;
 }
 
-// NEW: a link that opens in a new tab (only for normal web addresses)
+// a link that opens in a new tab (only for normal web addresses)
 function makeLink(url, text) {
   const link = document.createElement("a");
   link.href = url;
@@ -2626,7 +2623,7 @@ function drawDetails() {
 
   panelBody.innerHTML = "";
 
-  // Deadline chip and (NEW) where the details came from
+  // Your date chip and where the details came from
   const myDate = getMyDate(uni);
   const myDateText = describeMyDate(myDate);
   const statusRow = makeElement("div", "panel-badges");
@@ -2649,7 +2646,7 @@ function drawDetails() {
   );
   if (myDateText.sub) facts.append(makeFact("flag", myDateText.sub));
 
-  // NEW: link to the official website
+  // link to the official website
   const website = safeUrl(uni.website);
   if (website) {
     const row = makeElement("div", "fact");
@@ -2657,7 +2654,7 @@ function drawDetails() {
     facts.append(row);
   }
 
-  // NEW: the pages the details came from
+  // the pages the details came from
   const sourcesSection = makeElement("div", "panel-section");
   const sourceUrls = (uni.sources || []).map(safeUrl).filter(Boolean);
   if (sourceUrls.length > 0) {
@@ -2672,7 +2669,7 @@ function drawDetails() {
     sourcesSection.append(heading, list);
   }
 
-  // NEW: the short description from Wikipedia
+  // the short description from Wikipedia
   const aboutSection = makeElement("div", "panel-section");
   if (uni.about) {
     const heading = makeElement("h4", "eyebrow");
