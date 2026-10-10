@@ -492,3 +492,95 @@ test("if your account can't be reached, the header says Not synced", async ({ pa
   await expect(page.locator("#uni-list .uni-card")).toHaveCount(1);   // this browser's copy still works
   expect(page.errors).toEqual([]);
 });
+
+// ----- The sign-in window: eye button, closing, password, deleting -----
+
+test("the eye button shows and hides passwords", async ({ page }) => {
+  await openWith(page, {});
+  await openSignIn(page);
+  const box = page.locator("#sign-in-password");
+  await box.fill("secret password");
+  await expect(box).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(box).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Hide password" }).click();
+  await expect(box).toHaveAttribute("type", "password");
+  expect(page.errors).toEqual([]);
+});
+
+test("clicking outside the sign-in window doesn't close it; the close button does", async ({ page }) => {
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.mouse.click(10, 10);                               // the dark area around it
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await expect(page.locator("#sign-in-email")).toHaveValue("student@example.com");
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+});
+
+test("the sign-in window starts empty each time it opens", async ({ page }) => {
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.fill("#sign-in-password", "half typed");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
+  await openSignIn(page);
+  await expect(page.locator("#sign-in-email")).toHaveValue("");
+  await expect(page.locator("#sign-in-password")).toHaveValue("");
+  await expect(page.locator("#sign-in-password")).toHaveAttribute("type", "password");
+});
+
+test("accounts that have a password see Change password, not Set a password", async ({ page }) => {
+  await fakeAccount(page, accountRow([]));
+  await signInAs(page, "student@example.com", { has_password: true });
+  await openWith(page, {});
+  await page.locator("#account-button").click();
+  await expect(page.locator("#account-dialog")).toContainText("Signed in as student@example.com");
+  await expect(page.getByText("Set a password")).toBeHidden();
+  await expect(page.locator("#set-password-form")).toBeHidden();
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.locator("#new-password")).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+test("signing in with a password notes that the account has one", async ({ page }) => {
+  const userCalls = await fakeAuth(page, "user", { json: { ...USER, user_metadata: { has_password: true } } });
+  await fakeAuth(page, "token", { json: session() });   // a user without the note yet
+  await fakeAccount(page, accountRow([]));
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.fill("#sign-in-password", "correct horse");
+  await page.locator("#sign-in-password").press("Enter");
+  await expect.poll(() => userCalls.some((body) => body && body.data && body.data.has_password === true)).toBe(true);
+  expect(page.errors).toEqual([]);
+});
+
+test("Delete my account deletes the account and clears this browser", async ({ page }) => {
+  await fakeAuth(page, "logout", { status: 204, body: "" });
+  let deleted = false;
+  await page.route(/supabase\.co\/rest\/v1\/rpc\/delete_my_account/, (route) => {
+    deleted = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+  await fakeAccount(page, accountRow([ESCP]));
+  await signInAs(page, "student@example.com", { has_password: true });
+  await openWith(page, { apiKey: "sk-ant-mine" });
+  await expect(page.locator("#uni-list .uni-card")).toHaveCount(1);
+
+  await page.locator("#account-button").click();
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await expect(page.locator("#delete-confirm")).toContainText("can't be undone");   // asks first
+  expect(deleted).toBe(false);
+  await page.getByRole("button", { name: "Delete forever" }).click();
+
+  await expect(page.locator(".toast").last()).toContainText("Your account and all its data were deleted.");
+  expect(deleted).toBe(true);
+  await expect(page.locator("#account-button")).toHaveText("Sign in");
+  await expect(page.locator("#uni-list .uni-card")).toHaveCount(0);
+  const saved = await page.evaluate(() => Object.keys(localStorage));
+  expect(saved.filter((key) => key.startsWith("sb-") || key === "future-planner-claude-key")).toEqual([]);
+  expect(page.errors).toEqual([]);
+});

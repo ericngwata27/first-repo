@@ -98,14 +98,14 @@ export const ESADE = {
 
 // Pretend someone is signed in: save a Supabase session the way the
 // Supabase library does, before the page loads
-export async function signInAs(page, email) {
-  await page.addInitScript((email) => {
+export async function signInAs(page, email, userMetadata = {}) {
+  await page.addInitScript(({ email, userMetadata }) => {
     localStorage.setItem("sb-xhyiyxquqnntvnpnlnhk-auth-token", JSON.stringify({
       access_token: "test-token", refresh_token: "test-refresh", token_type: "bearer",
       expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600,
-      user: { id: "00000000-0000-4000-8000-000000000001", email, aud: "authenticated", role: "authenticated" },
+      user: { id: "00000000-0000-4000-8000-000000000001", email, aud: "authenticated", role: "authenticated", user_metadata: userMetadata },
     }));
-  }, email);
+  }, { email, userMetadata });
 }
 
 // A pretend Supabase database for the signed-in person's planner.
