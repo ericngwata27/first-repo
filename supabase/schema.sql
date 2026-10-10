@@ -3,6 +3,7 @@
 --
 -- HOW TO USE: Supabase dashboard -> SQL Editor -> New query ->
 -- paste this whole file -> Run. It's safe to run again.
+-- Then do the same with delete-account.sql (the "Delete my account" button).
 --
 -- One row per person holds their whole planner, in the same shape
 -- as the "Export my data" file (see DATA_MODEL.md). That way the

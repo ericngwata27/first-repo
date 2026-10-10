@@ -27,6 +27,7 @@
    23. Loading, saved and error states
    24. Welcome band (first run)
    25. Sign in
+   27. Password eye, change password, delete account
    ========================================================= */
 
 
@@ -3264,4 +3265,87 @@ body::before {
     clip-path: inset(50%);
     white-space: nowrap;
   }
+}
+
+
+/* =========================================================
+   27. PASSWORD EYE, CHANGE PASSWORD, DELETE ACCOUNT
+   (the sign-in window; numbered 27 so it doesn't clash with
+   the legal pages' section 26)
+   ========================================================= */
+
+/* A password box with an eye button inside, on the right */
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 44px;   /* room for the eye */
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  color: var(--ink);
+  background: var(--gray-soft);
+}
+
+.password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Show the open eye while the password is hidden, and the crossed-out eye while it's shown */
+.password-toggle .icon-hide,
+.password-toggle[aria-pressed="true"] .icon-show {
+  display: none;
+}
+
+.password-toggle[aria-pressed="true"] .icon-hide {
+  display: block;
+}
+
+#change-password[hidden],
+#set-password-form[hidden],
+.delete-confirm[hidden] {
+  display: none;
+}
+
+/* Delete my account: kept apart at the bottom, in red */
+.danger-zone {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.danger-link {
+  color: var(--red);
+  margin-bottom: 0;
+}
+
+.delete-confirm {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--red);
+  border-radius: 12px;
+  background: var(--red-soft);
+}
+
+.delete-confirm p {
+  font-size: 0.9rem;
 }

@@ -542,7 +542,11 @@
         <label for="sign-in-email">Email</label>
         <input id="sign-in-email" type="email" autocomplete="email" placeholder="name@example.com" required>
         <label for="sign-in-password">Password</label>
-        <input id="sign-in-password" type="password" autocomplete="current-password" minlength="8" required>
+        <!-- The eye button shows or hides the password (auth.js) -->
+        <div class="password-field">
+          <input id="sign-in-password" type="password" autocomplete="current-password" minlength="8" required>
+          <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false"><i data-lucide="eye" class="icon-show"></i><i data-lucide="eye-off" class="icon-hide"></i></button>
+        </div>
         <!-- Enter (or this button) signs in. "Create account" uses the same two boxes. -->
         <div class="sign-in-buttons">
           <button class="button button-primary" id="sign-in-submit" type="submit"><i data-lucide="log-in"></i> Sign in</button>
@@ -566,15 +570,32 @@
       <h2>Your account</h2>
       <p>Signed in as <strong id="account-email"></strong>.</p>
 
-      <!-- Accounts made with an email link have no password yet; this sets or changes it -->
+      <!-- Accounts made with an email link have no password yet: they see this form.
+           Accounts with a password only see "Change password", which opens it. (auth.js) -->
+      <button class="link-button" id="change-password" type="button" hidden>Change password</button>
       <form id="set-password-form" class="sign-in-form" novalidate>
         <label for="new-password" id="new-password-label">Set a password</label>
-        <input id="new-password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+        <div class="password-field">
+          <input id="new-password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+          <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false"><i data-lucide="eye" class="icon-show"></i><i data-lucide="eye-off" class="icon-hide"></i></button>
+        </div>
         <button class="button" id="set-password-submit" type="submit"><i data-lucide="key-round"></i> Save password</button>
       </form>
 
       <p class="muted account-note">Your planner saves to your account. Signing out removes it from this browser (it stays in your account).</p>
       <button class="button" id="sign-out" type="button"><i data-lucide="log-out"></i> Sign out</button>
+
+      <!-- Deleting the account asks once more before doing anything (auth.js) -->
+      <div class="danger-zone">
+        <button class="link-button danger-link" id="delete-account" type="button">Delete my account</button>
+        <div id="delete-confirm" class="delete-confirm" hidden>
+          <p><strong>Delete your account and your whole planner?</strong> This can't be undone. Use <em>Export my data</em> on the Profile tab first if you want a copy.</p>
+          <div class="sign-in-buttons">
+            <button class="button" id="delete-cancel" type="button">Keep my account</button>
+            <button class="button button-danger" id="delete-confirm-button" type="button"><i data-lucide="trash-2"></i> Delete forever</button>
+          </div>
+        </div>
+      </div>
     </div>
   </dialog>
 
