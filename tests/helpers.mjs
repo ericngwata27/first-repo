@@ -1,30 +1,12 @@
 // Shared setup for the tests.
 //
-// The website loads its libraries (Globe.gl, three.js, icons) and globe
-// pictures from the internet. Tests serve the same exact versions from
-// node_modules instead, so they're fast and don't depend on the internet.
-// Every other outside request (fonts, Wikidata, map search, Claude, Supabase) is
-// blocked unless a test answers it itself.
+// The website loads its libraries, fonts and globe pictures from its own
+// folders (vendor/, fonts/, textures/). Every outside request (Wikidata,
+// map search, Claude, Supabase) is blocked unless a test answers it itself.
 import { test as base, expect } from "@playwright/test";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-
-const MODULES = fileURLToPath(new URL("../node_modules/", import.meta.url));
 
 // Everything in the tests happens on this date
 export const TODAY = new Date("2026-10-09T10:00:00Z");
-
-const LOCAL_COPIES = [
-  [/unpkg\.com\/globe\.gl@[^/]+\/dist\/(.*)$/, "globe.gl/dist/"],
-  [/unpkg\.com\/globe\.gl@[^/]+\/example\/datasets\/(.*)$/, "globe.gl/example/datasets/"],
-  [/unpkg\.com\/three-globe@[^/]+\/example\/img\/(.*)$/, "three-globe/example/img/"],
-  [/unpkg\.com\/three@[^/]+\/(.*)$/, "three/"],
-  [/unpkg\.com\/lucide@[^/]+\/(.*)$/, "lucide/"],
-  [/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@[^/]+\/(.*)$/, "@supabase/supabase-js/"],
-];
-
-const TYPES = { js: "text/javascript", json: "application/json", geojson: "application/json",
-  jpg: "image/jpeg", png: "image/png" };
 
 export const test = base.extend({
   page: async ({ page }, use) => {
@@ -35,21 +17,12 @@ export const test = base.extend({
     await page.clock.install({ time: TODAY });
     await page.clock.resume();
 
-    await page.route(/^https?:\/\/(?!localhost)/, async (route) => {
-      const url = route.request().url();
-      for (const [pattern, folder] of LOCAL_COPIES) {
-        const match = url.match(pattern);
-        if (match) {
-          const path = match[1].split("?")[0];
-          return route.fulfill({
-            body: await readFile(MODULES + folder + path),
-            contentType: TYPES[path.split(".").pop()] || "application/octet-stream",
-            headers: { "access-control-allow-origin": "*" },
-          });
-        }
-      }
-      return route.fulfill({ status: 404, body: "" });
+    // Track every request to another server; block it unless a test answers it
+    page.outsideRequests = [];
+    page.on("request", (request) => {
+      if (!/^https?:\/\/localhost[:/]/.test(request.url())) page.outsideRequests.push(request.url());
     });
+    await page.route(/^https?:\/\/(?!localhost)/, (route) => route.fulfill({ status: 404, body: "" }));
 
     await use(page);
   },

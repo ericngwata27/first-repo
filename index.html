@@ -6,18 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>planmyfuture</title>
 
-  <!-- Fonts: "Manrope" for headings, "Figtree" for everything else -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Figtree:wght@400;500;600&display=swap">
+  <!-- Fonts: "Manrope" for headings, "Figtree" for everything else.
+       They're in the fonts/ folder (see fonts.css), NOT loaded from Google:
+       loading Google Fonts sends every visitor's IP address to Google,
+       which German courts have ruled needs consent. -->
+  <link rel="stylesheet" href="fonts/fonts.css">
 
   <!-- Where the globe's day/night look and the optional "Glow" effect load
        their three.js files from (the same three.js version Globe.gl is built with) -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.185.0/build/three.module.min.js",
-        "three/addons/": "https://unpkg.com/three@0.185.0/examples/jsm/"
+        "three": "./vendor/three/build/three.module.min.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
       }
     }
   </script>
@@ -581,9 +582,11 @@
   <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
   <!-- Libraries: they must load BEFORE our code uses them -->
-  <script src="https://unpkg.com/globe.gl@2.46.2/dist/globe.gl.min.js"></script>   <!-- the 3D globe -->
-  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script> <!-- the icons -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script> <!-- accounts -->
+  <!-- Libraries, served from this site's vendor/ folder (copied by "npm run vendor")
+       so visitors' browsers never contact unpkg or jsDelivr -->
+  <script src="vendor/globe.gl/globe.gl.min.js"></script>   <!-- the 3D globe (globe.gl 2.46.2) -->
+  <script src="vendor/lucide/lucide.min.js"></script>       <!-- the icons (lucide 0.453.0) -->
+  <script src="vendor/supabase/supabase.js"></script>       <!-- accounts (supabase-js 2.117.1) -->
 
   <!-- Our own code, in this order (each file uses the ones above it) -->
   <script src="store.js"></script>         <!-- your saved data: state, loadState(), save() -->
