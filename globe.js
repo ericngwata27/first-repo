@@ -31,16 +31,16 @@ let globe = null;
 // so an update to the libraries can't change the site by surprise)
 const GLOBE_FILES = {
   // NASA pictures, 4096 x 2048 pixels: they load quickly, so the globe appears fast
-  night: "https://unpkg.com/three-globe@2.45.2/example/img/earth-night.jpg",
-  day: "https://unpkg.com/three-globe@2.45.2/example/img/earth-blue-marble.jpg",
-  water: "https://unpkg.com/three-globe@2.45.2/example/img/earth-water.png",   // white = ocean (for the shine)
-  bumps: "https://unpkg.com/three-globe@2.45.2/example/img/earth-topology.png",
+  night: "textures/earth-night.jpg",
+  day: "textures/earth-blue-marble.jpg",
+  water: "textures/earth-water.png",   // white = ocean (for the shine)
+  bumps: "textures/earth-topology.png",
   // Sharper 8192 x 4096 versions, kept in this website's "textures" folder.
   // When they're there, they replace the 4K ones once downloaded.
   // If they're missing, the 4K ones simply stay.
   day8k: "textures/earth-day-8k.jpg",
   night8k: "textures/earth-night-8k.jpg",
-  borders: "https://unpkg.com/globe.gl@2.46.2/example/datasets/ne_110m_admin_0_countries.geojson",
+  borders: "vendor/globe.gl/countries.geojson",
 };
 
 // How close you can zoom in, as a height above the globe (1 = one globe
