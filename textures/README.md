@@ -1,4 +1,11 @@
-# Globe pictures (optional)
+# Globe pictures
+
+The 4096 × 2048 NASA pictures the globe uses (`earth-night.jpg`,
+`earth-blue-marble.jpg`, `earth-water.png`, `earth-topology.png`) are in this
+folder, copied by `npm run vendor`, so visitors' browsers don't fetch them
+from another server.
+
+## Sharper 8K pictures (optional)
 
 The 3D globe looks sharpest with two 8192 × 4096 pictures in this folder:
 
@@ -6,8 +13,8 @@ The 3D globe looks sharpest with two 8192 × 4096 pictures in this folder:
 - `earth-night-8k.jpg`: the Earth at night (city lights)
 
 If they're here, the globe swaps to them after loading (and lets you zoom in
-closer). If they're missing, it keeps using the 4096 × 2048 NASA pictures
-from the internet, so nothing breaks.
+closer). If they're missing, it keeps using the 4096 × 2048 pictures
+above, so nothing breaks.
 
 Keep each file under about 10 MB so the globe still loads quickly on phones.
 
