@@ -284,18 +284,115 @@ test("the header says when your changes are saved, or can't be", async ({ page }
   expect(page.errors).toEqual([]);
 });
 
-test("signing in sends an email link", async ({ page }) => {
-  let sent = null;
-  await page.route(/supabase\.co\/auth\/v1\/otp/, (route) => {
-    sent = route.request().postDataJSON();
-    return route.fulfill({ json: {} });
+// ----- Signing in with email + password (auth.js) -----
+
+const USER = { id: "00000000-0000-4000-8000-000000000001", email: "student@example.com", aud: "authenticated", role: "authenticated" };
+
+// What Supabase answers when sign-in works
+const session = () => ({
+  access_token: "test-token", token_type: "bearer", expires_in: 3600,
+  expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: "test-refresh", user: USER,
+});
+
+// Supabase's answer to a request (path is e.g. "token", "signup", "recover", "user")
+async function fakeAuth(page, path, answer) {
+  const calls = [];
+  await page.route(new RegExp("supabase\\.co/auth/v1/" + path), (route) => {
+    calls.push(route.request().postDataJSON());
+    return route.fulfill(answer);
   });
+  return calls;
+}
+
+async function openSignIn(page) {
+  await page.getByRole("button", { name: "Sign in" }).first().click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+}
+
+test("signing in with email and password loads your account's planner", async ({ page }) => {
+  const calls = await fakeAuth(page, "token", { json: session() });
+  await fakeAccount(page, accountRow([ESCP]));
   await openWith(page, {});
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await openSignIn(page);
   await page.fill("#sign-in-email", "student@example.com");
-  await page.getByRole("button", { name: "Email me a link" }).click();
+  await page.fill("#sign-in-password", "correct horse");
+  await page.locator("#sign-in-password").press("Enter");
+  await expect(page.locator("#account-button")).toHaveText("student@example.com");
+  await expect(page.locator("#uni-list")).toContainText("ESCP Business School");   // syncing ran
+  expect(calls[0]).toMatchObject({ email: "student@example.com", password: "correct horse" });
+  expect(page.errors).toEqual([]);
+});
+
+test("a wrong password shows a helpful message", async ({ page }) => {
+  await fakeAuth(page, "token", { status: 400, json: { error_code: "invalid_credentials", msg: "Invalid login credentials" } });
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.fill("#sign-in-password", "wrong one");
+  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
+  await expect(page.locator(".toast.is-warning")).toContainText("Wrong email or password");
+  await expect(page.locator("#account-button")).toHaveText("Sign in");
+  expect(page.errors).toEqual([]);
+});
+
+test("creating an account signs you in", async ({ page }) => {
+  const calls = await fakeAuth(page, "signup", { json: session() });
+  await fakeAccount(page, null);
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.fill("#sign-in-password", "a good password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.locator("#account-button")).toHaveText("student@example.com");
+  expect(calls[0]).toMatchObject({ email: "student@example.com", password: "a good password" });
+  expect(page.errors).toEqual([]);
+});
+
+test("creating an account asks to confirm the email if Supabase requires it", async ({ page }) => {
+  await fakeAuth(page, "signup", { json: { ...USER, identities: [{ id: "x" }] } });   // a user, but no session
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.fill("#sign-in-password", "a good password");
+  await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.locator("#account-dialog")).toContainText("Check your email");
-  expect(sent.email).toBe("student@example.com");
+  await expect(page.locator("#account-button")).toHaveText("Sign in");
+  expect(page.errors).toEqual([]);
+});
+
+test("passwords must be long enough", async ({ page }) => {
+  const calls = await fakeAuth(page, "signup", { json: session() });
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.fill("#sign-in-password", "short");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.locator(".toast.is-warning")).toContainText("at least 8 characters");
+  expect(calls).toEqual([]);   // nothing was sent
+  expect(page.errors).toEqual([]);
+});
+
+test("forgot password emails a link", async ({ page }) => {
+  const calls = await fakeAuth(page, "recover", { json: {} });
+  await openWith(page, {});
+  await openSignIn(page);
+  await page.fill("#sign-in-email", "student@example.com");
+  await page.getByRole("button", { name: "Forgot password? Email me a link" }).click();
+  await expect(page.locator("#account-dialog")).toContainText("Check your email");
+  expect(calls[0]).toMatchObject({ email: "student@example.com" });
+  expect(page.errors).toEqual([]);
+});
+
+test("a signed-in person can set a password", async ({ page }) => {
+  const calls = await fakeAuth(page, "user", { json: USER });
+  await fakeAccount(page, accountRow([]));
+  await signInAs(page, "student@example.com");
+  await openWith(page, {});
+  await page.locator("#account-button").click();
+  await page.fill("#new-password", "my new password");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(page.locator(".toast").last()).toContainText("Password saved");
+  expect(calls.at(-1)).toMatchObject({ password: "my new password" });
   expect(page.errors).toEqual([]);
 });
 
