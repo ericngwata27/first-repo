@@ -170,4 +170,8 @@ Row Level Security means each person can only read and change their own row.
 - **Coming back to the tab** loads changes made on another device.
 - `future-planner-owner` (browser only) remembers which account the browser's copy belongs to, so one person's planner is never added to someone else's account. Separate tables (universities, milestones, …) can come later if the planner ever needs to search or share across people.
 
+**Account notes (Supabase Auth `user_metadata`):** `has_password: true` once the account has a password (set at sign-up, on a password sign-in, or when saving one). Accounts made with the old email link don't have it, so the account window offers "Set a password" only to them.
+
+**Deleting an account:** the database function `delete_my_account()` ([`supabase/delete-account.sql`](supabase/delete-account.sql)) deletes the caller's `planner_data` row and their login. It runs with the database owner's rights but only ever deletes the person calling it. The website then signs out and removes everything planmyfuture saved in the browser.
+
 Still to come: a shared `search_cache` table and a daily auto-fill limit, when auto-fill moves to the server.
