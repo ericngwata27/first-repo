@@ -58,6 +58,7 @@ The tests (`tests/app.spec.mjs`) open the site in headless Chrome and check the 
 | `main.js` | Starts the app: loads data, updates old data, draws everything |
 | `timeline.js` | The Timeline page (cards, dates, slider, milestones, calendar export) |
 | `textures/` | Optional 8K globe pictures (see its README) |
+| `privacy.html`, `terms.html`, `imprint.html` | Privacy Policy, Terms of Use and Imprint (German + English). Fill in the highlighted `[ … ]` placeholders. |
 | `tests/` | Automated tests and a tiny local web server |
 
 ## Credits
