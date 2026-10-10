@@ -529,26 +529,49 @@
   <dialog class="account-dialog" id="account-dialog" aria-labelledby="account-title">
     <button class="icon-button account-close" id="account-close" type="button" aria-label="Close"><i data-lucide="x"></i></button>
 
+    <!-- Signed out: email + password -->
     <div data-view="sign-in">
       <h2 id="account-title">Sign in</h2>
-      <p class="muted">We'll email you a link. No password needed. New here? The same link creates your account.</p>
+      <p class="muted">Sign in to save your planner to your account, so it's the same on every device.</p>
+
+      <!-- "Sign in with Google" will go here later -->
+      <div id="google-sign-in" class="google-sign-in" hidden></div>
+
       <form id="sign-in-form" class="sign-in-form" novalidate>
         <label for="sign-in-email">Email</label>
         <input id="sign-in-email" type="email" autocomplete="email" placeholder="name@example.com" required>
-        <button class="button button-primary" id="sign-in-submit" type="submit"><i data-lucide="mail"></i> Email me a link</button>
+        <label for="sign-in-password">Password</label>
+        <input id="sign-in-password" type="password" autocomplete="current-password" minlength="8" required>
+        <!-- Enter (or this button) signs in. "Create account" uses the same two boxes. -->
+        <div class="sign-in-buttons">
+          <button class="button button-primary" id="sign-in-submit" type="submit"><i data-lucide="log-in"></i> Sign in</button>
+          <button class="button" id="sign-up" type="button"><i data-lucide="user-plus"></i> Create account</button>
+        </div>
       </form>
-      <p class="muted account-note">Signed in, your planner saves to your account, so it's the same on every device. What's already in this browser is added to it.</p>
+      <button class="link-button" id="forgot-password" type="button">Forgot password? Email me a link</button>
+      <p class="muted account-note">What's already in this browser is added to your account when you sign in.</p>
     </div>
 
+    <!-- After "Forgot password" or "Create account" when an email is needed -->
     <div data-view="sent" hidden>
       <h2>Check your email</h2>
-      <p>We sent a sign-in link to <strong id="sent-email"></strong>. Open it to finish signing in.</p>
-      <p class="muted account-note">Nothing there? Check your spam folder, or wait a minute and try again.</p>
+      <p id="sent-message"></p>
+      <p class="muted account-note">Nothing there? Check your spam folder, or wait a few minutes and try again.</p>
+      <button class="link-button" id="back-to-sign-in" type="button">Back to sign in</button>
     </div>
 
+    <!-- Signed in -->
     <div data-view="signed-in" hidden>
       <h2>Your account</h2>
       <p>Signed in as <strong id="account-email"></strong>.</p>
+
+      <!-- Accounts made with an email link have no password yet; this sets or changes it -->
+      <form id="set-password-form" class="sign-in-form" novalidate>
+        <label for="new-password" id="new-password-label">Set a password</label>
+        <input id="new-password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+        <button class="button" id="set-password-submit" type="submit"><i data-lucide="key-round"></i> Save password</button>
+      </form>
+
       <p class="muted account-note">Your planner saves to your account. Signing out removes it from this browser (it stays in your account).</p>
       <button class="button" id="sign-out" type="button"><i data-lucide="log-out"></i> Sign out</button>
     </div>

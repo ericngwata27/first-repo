@@ -1,6 +1,6 @@
 // =========================================================
 // PLANMYFUTURE: auth.js
-// Signing in with Supabase: an email link, no password.
+// Signing in with Supabase: email + password.
 //
 // Sections: 16. Signing in
 // (Loads after profile.js and before main.js.)
@@ -23,7 +23,7 @@ const SUPABASE_KEY = "sb_publishable_3POa8JWn5D5d303JVTiDXw_OevNvdpY";
 // If it didn't load (offline, blocked), the site still works without accounts.
 const supabaseClient = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { flowType: "implicit" },   // the email link works on any device
+      auth: { flowType: "implicit" },   // "Forgot password" email links work on any device
     })
   : null;
 
@@ -34,7 +34,15 @@ const accountLabel = document.getElementById("account-label");
 const accountDialog = document.getElementById("account-dialog");
 const signInForm = document.getElementById("sign-in-form");
 const signInEmail = document.getElementById("sign-in-email");
+const signInPassword = document.getElementById("sign-in-password");
 const signInButton = document.getElementById("sign-in-submit");
+const signUpButton = document.getElementById("sign-up");
+const forgotButton = document.getElementById("forgot-password");
+const setPasswordForm = document.getElementById("set-password-form");
+const newPassword = document.getElementById("new-password");
+
+const MIN_PASSWORD = 8;            // Supabase also checks this (Authentication → Policies)
+let choosingNewPassword = false;   // true after opening a "Forgot password" email link
 
 // Show one of the dialog's three views: "sign-in", "sent" or "signed-in"
 function showAccountView(view) {
@@ -49,6 +57,8 @@ function showAccount() {
   accountButton.classList.toggle("is-signed-in", Boolean(currentUser));
   if (currentUser) {
     document.getElementById("account-email").textContent = currentUser.email;
+    document.getElementById("new-password-label").textContent =
+      choosingNewPassword ? "Choose a new password" : "Set a password";
     showAccountView("signed-in");
   } else if (!accountDialog.open) {
     showAccountView("sign-in");
@@ -65,10 +75,17 @@ if (!supabaseClient) {
     // setTimeout: Supabase asks that nothing else waits inside this callback
     setTimeout(function () {
       showAccount();
-      if (event === "SIGNED_IN" && !wasSignedIn) {
+      if (event === "SIGNED_IN" && !wasSignedIn && !choosingNewPassword) {
         showToast("Signed in as " + currentUser.email + ". Your planner now saves to your account.", "user-check");
       }
-      // Signed in from another tab: connect this one too, once the page is ready
+      // Opened a "Forgot password" link: you're signed in, now pick a new password
+      if (event === "PASSWORD_RECOVERY") {
+        choosingNewPassword = true;
+        showAccount();
+        if (!accountDialog.open) accountDialog.showModal();
+        newPassword.focus();
+      }
+      // Signed in (here or in another tab): load your account's planner, once the page is ready
       if (event === "SIGNED_IN" && currentUser) {
         appReady.then(async function () {
           if (cloudUser && cloudUser.id === currentUser.id) return;
@@ -99,33 +116,145 @@ accountDialog.addEventListener("click", function (event) {
   if (event.target === accountDialog) accountDialog.close();
 });
 
+// ----- Checking what was typed -----
+
+function isEmail(text) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+}
+
+// The email from the form, or null (with a message) if it isn't one
+function readEmail() {
+  const email = signInEmail.value.trim();
+  if (isEmail(email)) return email;
+  showToast("Enter your email address, like name@example.com.", "circle-alert");
+  signInEmail.focus();
+  return null;
+}
+
+// The password from a box, or null (with a message) if it's too short
+function readPassword(box) {
+  if (box.value.length >= MIN_PASSWORD) return box.value;
+  showToast("Your password needs at least " + MIN_PASSWORD + " characters.", "circle-alert");
+  box.focus();
+  return null;
+}
+
+// Grey out a button while Supabase is working, so it isn't clicked twice
+async function whileBusy(button, task) {
+  button.disabled = true;
+  try {
+    return await task();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// Supabase's error -> a sentence for people
+function describeAuthError(error) {
+  const code = error.code || "";
+  if (code === "invalid_credentials") {
+    return "Wrong email or password. No password yet? Use \"Forgot password\" to get a link, then set one.";
+  }
+  if (code === "email_not_confirmed") return "Confirm your email first: open the link we sent you.";
+  if (code === "user_already_exists") return "There's already an account with this email. Sign in instead, or use \"Forgot password\".";
+  if (code === "weak_password") return "Choose a stronger password: longer, with letters and numbers.";
+  if (code === "same_password") return "That's already your password.";
+  if (error.status === 429) return "Too many tries for now. Wait a few minutes and try again.";
+  return error.message || "Something went wrong. Try again.";
+}
+
+function showSent(message) {
+  document.getElementById("sent-message").textContent = message;
+  showAccountView("sent");
+}
+
+// The page the email links bring you back to (this one)
+function thisPage() {
+  return location.origin + location.pathname;
+}
+
+
+// ----- Sign in (the form's main button, or Enter) -----
 signInForm.addEventListener("submit", async function (event) {
   event.preventDefault();
-  const email = signInEmail.value.trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    showToast("Enter your email address, like name@example.com.", "circle-alert");
-    signInEmail.focus();
+  const email = readEmail();
+  if (!email) return;
+  if (!signInPassword.value) {
+    showToast("Enter your password.", "circle-alert");
+    signInPassword.focus();
     return;
   }
 
-  signInButton.disabled = true;
-  const result = await supabaseClient.auth.signInWithOtp({
-    email: email,
-    // The link in the email brings you back to this exact page
-    options: { emailRedirectTo: location.origin + location.pathname },
+  const result = await whileBusy(signInButton, function () {
+    return supabaseClient.auth.signInWithPassword({ email: email, password: signInPassword.value });
   });
-  signInButton.disabled = false;
-
   if (result.error) {
-    // Supabase's free email service only sends a few emails per hour
-    const tooMany = result.error.status === 429;
-    showToast(tooMany
-      ? "Too many sign-in emails for now. Wait a few minutes and try again."
-      : "Couldn't send the email: " + result.error.message, "circle-alert");
+    showToast(describeAuthError(result.error), "circle-alert");
     return;
   }
-  document.getElementById("sent-email").textContent = email;
-  showAccountView("sent");
+  // Signed in: onAuthStateChange (above) loads your account's planner
+  signInPassword.value = "";
+  accountDialog.close();
+});
+
+// ----- Create account -----
+signUpButton.addEventListener("click", async function () {
+  const email = readEmail();
+  if (!email) return;
+  const password = readPassword(signInPassword);
+  if (!password) return;
+
+  const result = await whileBusy(signUpButton, function () {
+    return supabaseClient.auth.signUp({ email: email, password: password, options: { emailRedirectTo: thisPage() } });
+  });
+  if (result.error) {
+    showToast(describeAuthError(result.error), "circle-alert");
+    return;
+  }
+  signInPassword.value = "";
+  if (result.data.session) {
+    accountDialog.close();   // signed in straight away
+  } else {
+    // Supabase's "Confirm email" setting is on: an email has to be opened first
+    showSent("We sent a confirmation link to " + email + ". Open it to finish creating your account.");
+  }
+});
+
+// ----- Forgot password: email a link that signs you in to choose a new one -----
+forgotButton.addEventListener("click", async function () {
+  const email = readEmail();
+  if (!email) return;
+  const result = await whileBusy(forgotButton, function () {
+    return supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: thisPage() });
+  });
+  if (result.error) {
+    showToast(describeAuthError(result.error), "circle-alert");
+    return;
+  }
+  showSent("If there's an account for " + email + ", we sent it a link. Open it and you'll be asked to choose a new password.");
+});
+
+document.getElementById("back-to-sign-in").addEventListener("click", function () {
+  showAccountView("sign-in");
+  signInEmail.focus();
+});
+
+// ----- Set (or change) your password, while signed in -----
+setPasswordForm.addEventListener("submit", async function (event) {
+  event.preventDefault();
+  const password = readPassword(newPassword);
+  if (!password) return;
+  const result = await whileBusy(document.getElementById("set-password-submit"), function () {
+    return supabaseClient.auth.updateUser({ password: password });
+  });
+  if (result.error) {
+    showToast(describeAuthError(result.error), "circle-alert");
+    return;
+  }
+  newPassword.value = "";
+  choosingNewPassword = false;
+  showAccount();
+  showToast("Password saved. Next time, sign in with your email and password.", "key-round");
 });
 
 document.getElementById("sign-out").addEventListener("click", async function () {
