@@ -530,3 +530,27 @@ test("the sign-in window links to the terms and privacy policy", async ({ page }
   await expect(page.locator("#account-dialog").getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "privacy.html");
   await expect(page.locator("#account-dialog").getByRole("link", { name: "Terms of Use" })).toHaveAttribute("href", "terms.html");
 });
+// ----- Privacy: nothing is loaded from other servers -----
+
+test("the site loads fonts, libraries and pictures only from itself", async ({ page }) => {
+  const loaded = [];
+  page.on("response", (response) => {
+    if (response.ok()) loaded.push(new URL(response.url()).pathname);
+  });
+  await openWith(page, { universities: [ESCP] });
+  await page.locator("#globe-settings-button").click();
+  await page.locator('[data-globe-setting="borders"]').check();     // loads the country shapes
+  await page.locator('[data-globe-setting="glow"]').check();        // loads three.js's glow effect
+  for (const tab of ["Timeline", "Profile", "Universities"]) await openTab(page, tab);
+  await page.waitForTimeout(1500);
+
+  expect(page.outsideRequests).toEqual([]);                          // no Google Fonts, unpkg, jsDelivr…
+  expect(await page.evaluate(() => document.fonts.check('700 16px "Manrope"') && document.fonts.check('16px "Figtree"'))).toBe(true);
+  expect(loaded).toEqual(expect.arrayContaining([
+    "/fonts/manrope-latin.woff2", "/fonts/figtree-latin.woff2",
+    "/vendor/globe.gl/globe.gl.min.js", "/vendor/lucide/lucide.min.js", "/vendor/supabase/supabase.js",
+    "/textures/earth-night.jpg", "/vendor/globe.gl/countries.geojson",
+    "/vendor/three/build/three.module.min.js", "/vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js",
+  ]));
+  expect(page.errors).toEqual([]);
+});

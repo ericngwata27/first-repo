@@ -57,10 +57,15 @@ The tests (`tests/app.spec.mjs`) open the site in headless Chrome and check the 
 | `supabase/schema.sql` | The database setup: paste it into Supabase's SQL Editor |
 | `main.js` | Starts the app: loads data, updates old data, draws everything |
 | `timeline.js` | The Timeline page (cards, dates, slider, milestones, calendar export) |
-| `textures/` | Optional 8K globe pictures (see its README) |
 | `privacy.html`, `terms.html`, `imprint.html` | Privacy Policy, Terms of Use and Imprint (German + English). Fill in the highlighted `[ … ]` placeholders. |
+| `textures/` | The globe's Earth pictures (and optional 8K ones, see its README) |
+| `vendor/` | Local copies of the libraries (Globe.gl, three.js, Lucide, Supabase) and the country borders |
+| `fonts/` | The fonts (Manrope, Figtree), served from the site itself |
+| `scripts/vendor.mjs` | Copies `vendor/`, `fonts/` and the globe pictures from `node_modules` (`npm run vendor`) |
 | `tests/` | Automated tests and a tiny local web server |
 
 ## Credits
 
-Earth imagery: NASA. 3D globe: [Globe.gl](https://globe.gl). Icons: [Lucide](https://lucide.dev).
+Earth imagery: NASA. 3D globe: [Globe.gl](https://globe.gl). Icons: [Lucide](https://lucide.dev). Fonts: Manrope and Figtree (SIL Open Font License). Each library's license is next to it in `vendor/`.
+
+**Everything the page needs is served from this site.** No Google Fonts, no CDNs, so visitors' IP addresses aren't sent to other companies. Only Supabase (when signed in) and the auto-fill services (when you search) are contacted. To update a library: change its version in `package.json`, then `npm install` and `npm run vendor`.
